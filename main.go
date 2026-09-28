@@ -40,3 +40,6 @@ func main() {
 	log.Printf("Servidor listo en http://localhost%s", addr)
 	log.Fatal(http.ListenAndServe(addr, nil))
 }
+
+//when haces tus momos en tu código
+// el futuro es hoy viejo 🔥
