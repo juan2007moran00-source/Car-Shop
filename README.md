@@ -1,68 +1,86 @@
-#  AutoMarket
+# AutoMarket
 
-Sistema web para la gestión y consulta de vehículos usados.
+Backend HTTP para consultar y administrar publicaciones de vehículos usados. El proyecto usa Go y Gin. Las demás funciones usan solo la biblioteca estándar de Go.
 
-## Descripción
+## Ejecutar
 
-AutoMarket es un sitio web orientado a la publicación y consulta de
-vehículos usados en venta. La plataforma cuenta con diferentes
-funcionalidades dependiendo del rol del usuario.
+Requiere Go 1.26. Desde la raíz del repositorio, instala la dependencia permitida e inicia el servidor:
 
-El sistema contempla tres tipos de usuarios:
+```powershell
+go mod tidy
+$env:ADMIN_EMAIL = "admin@automarket.local"
+$env:ADMIN_PASSWORD = "una-clave-local-de-al-menos-8-caracteres"
+go run ./cmd/web
+```
 
-- Visitante
-- Vendedor
-- Administrador
+La aplicación escucha en `http://localhost:8080`. Las credenciales del administrador se configuran con variables de entorno para no guardarlas en el código ni en Git. Si no se configuran, el servidor funciona sin una cuenta administradora y las rutas de administración no se pueden usar.
 
-## Roles
+La aplicación guarda usuarios y vehículos en `data/automarket.json` y las operaciones en `data/audit.jsonl`. La auditoría encadena hashes SHA-256 para permitir detectar cambios en registros anteriores. Los datos y las credenciales no deben subirse al repositorio.
 
-### Visitante
-Puede consultar públicamente el catálogo de vehículos disponibles
-y acceder a la información de contacto del vendedor, sin necesidad
-de registrarse.
+## Rutas
 
-### Vendedor
-Puede registrarse en la plataforma, publicar vehículos en venta
-y reportar cuando estos hayan sido vendidos.
+| Método y ruta | Acceso | Función |
+| --- | --- | --- |
+| `POST /api/sellers` | Público | Registrar una cuenta de vendedor |
+| `POST /api/sessions` | Público | Iniciar sesión y recibir un token Bearer |
+| `GET /api/vehicles` | Público | Consultar el catálogo publicado y los contactos |
+| `GET /api/vehicles/:id` | Público | Consultar una publicación y el contacto del vendedor |
+| `POST /api/vehicles` | Vendedor | Crear una publicación pendiente de aprobación |
+| `POST /api/vehicles/:id/sale` | Vendedor propietario | Reportar la venta de una publicación publicada |
+| `GET /api/admin/vehicles/pending` | Administrador | Consultar publicaciones pendientes |
+| `POST /api/admin/vehicles/:id/approve` | Administrador | Aprobar una publicación pendiente |
+| `DELETE /api/admin/vehicles/:id` | Administrador | Eliminar una publicación |
+| `GET /api/admin/users` | Administrador | Consultar usuarios para moderación |
+| `DELETE /api/admin/users/:id` | Administrador | Eliminar una cuenta y sus publicaciones |
 
-### Administrador
-Puede autorizar las publicaciones realizadas por los vendedores
-y eliminar publicaciones o usuarios cuando sea necesario.
+Las rutas protegidas reciben `Authorization: Bearer <token>`. El registro crea únicamente vendedores; el rol no se acepta desde el cliente. Las contraseñas se guardan derivadas con PBKDF2-HMAC-SHA-256 y sal aleatoria. Los tokens de sesión viven en memoria y se invalidan al reiniciar el servidor.
 
-## Tecnologías
+## Ejemplos
 
-- Go
-- Gin
-- HTTP
-- Persistencia según la implementación del equipo
+Registro de vendedor:
 
-El proyecto utiliza únicamente las dependencias permitidas para
-la entrega académica.
+```json
+{
+  "name": "Ana Pérez",
+  "email": "ana@example.com",
+  "phone": "+57 300 000 0000",
+  "password": "clave-segura"
+}
+```
 
-## Requerimientos principales
+Inicio de sesión:
 
-El sistema implementa el marco de seguridad AAA:
+```json
+{
+  "email": "ana@example.com",
+  "password": "clave-segura"
+}
+```
 
-- Authentication: autenticación de los usuarios.
-- Authorization: autorización de operaciones según el rol.
-- Accounting: registro trazable de las operaciones realizadas.
+Publicación de vehículo, usando el token de vendedor:
 
-## Estado del proyecto
+```json
+{
+  "make": "Renault",
+  "model": "Logan",
+  "year": 2020,
+  "price_cop": 42000000,
+  "description": "Buen estado"
+}
+```
 
-Actualmente se encuentra en desarrollo.
+La publicación se crea como `pending`; solo aparece en el catálogo público después de la aprobación del administrador. Cuando el vendedor reporta la venta, pasa a `sold` y deja de aparecer en el catálogo.
 
-### Implementado
+## Estructura
 
-- [ ] Estructura inicial del proyecto
-- [ ] Rol Visitante
-- [ ] Catálogo público de vehículos
-- [ ] Información de contacto del vendedor
-- [ ] Rol Vendedor
-- [ ] Rol Administrador
-- [ ] Seguridad AAA
+- `cmd/web`: configuración y arranque del servidor.
+- `internal/httpapi`: rutas, autenticación HTTP y respuestas.
+- `internal/service`: reglas de negocio y manejo de sesiones.
+- `internal/domain`: entidades y estados del sistema.
+- `internal/store`: persistencia JSON local.
+- `internal/audit`: registro trazable de operaciones.
+- `web`: página de inicio y archivos estáticos.
 
-## Proyecto académico
+## Alcance académico
 
-**Asignatura:** Laboratorio de Software III  
-**Proyecto:** AutoMarket  
-**Universidad:** Universidad de San Buenaventura - Cali
+El backend cubre el catálogo público, registro y publicación de vendedores, reporte de venta, moderación administrativa y el marco AAA solicitado. La página de inicio existente es una portada mínima; las funcionalidades del sistema se exponen por la API.

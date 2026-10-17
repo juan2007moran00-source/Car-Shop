@@ -1,11 +1,18 @@
 <!DOCTYPE html>
+<!doctype html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>{{.Titulo}}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{.title}}</title>
     <link rel="stylesheet" href="/static/estilos.css">
 </head>
 <body>
-<h1>Bienvenido a {{.Titulo}}</h1>
+<main>
+    <p class="eyebrow">Catálogo de vehículos usados</p>
+    <h1>{{.title}}</h1>
+    <p>Consulta las publicaciones disponibles y comunícate directamente con cada vendedor.</p>
+    <a href="/api/vehicles">Ver catálogo en formato JSON</a>
+</main>
 </body>
 </html>
