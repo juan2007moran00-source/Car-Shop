@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#155eef">
+    <title>{{.title}}</title>
+    <link rel="stylesheet" href="/static/estilos.css">
+</head>
+<body class="login-page">
+<header class="topbar">
+    <a class="brand" href="/">Auto<span>Market</span></a>
+    <a class="text-link" href="/">Volver al inicio</a>
+</header>
+<main class="login-card">
+    <p class="eyebrow">Bienvenido de nuevo</p>
+    <h1>Iniciar sesión</h1>
+    <p class="muted">Ingresa con tu correo y contraseña.</p>
+    <form id="login-form">
+        <label for="email">Correo electrónico</label>
+        <input id="email" name="email" type="email" autocomplete="username" placeholder="tu@correo.com" required>
+        <label for="password">Contraseña</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+        <button class="button button-full" type="submit">Entrar</button>
+    </form>
+    <p id="message" class="message" role="status" aria-live="polite"></p>
+    <a class="text-link" href="/">← Ir al catálogo</a>
+</main>
+<script src="/static/login.js" defer></script>
+</body>
+</html>
