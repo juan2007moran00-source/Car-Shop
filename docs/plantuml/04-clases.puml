@@ -1,0 +1,36 @@
+@startuml AutoMarket-Clases
+title 4. Clases principales - AutoMarket
+skinparam shadowing false
+
+class User {
+    id
+    name
+    email
+    role
+}
+
+class Vehicle {
+    id
+    make
+    model
+    year
+    priceCOP
+    status
+    sellerID
+}
+
+class PublicVehicle {
+    datos del vehículo
+    status
+}
+
+class SellerContact {
+    name
+    email
+    phone
+}
+
+User "1" -- "0..*" Vehicle : vendedor publica
+Vehicle ..> PublicVehicle : respuesta pública
+PublicVehicle *-- SellerContact : incluye
+@enduml

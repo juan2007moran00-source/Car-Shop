@@ -2,6 +2,8 @@
 
 Estos diagramas describen el alcance del proyecto de curso y la implementación que existe en el repositorio. GitHub puede renderizar los bloques Mermaid de este archivo.
 
+Las versiones sencillas en PlantUML están en [`docs/plantuml`](plantuml/): [1. Contexto](plantuml/01-contexto.puml), [2. Contenedores](plantuml/02-contenedores.puml), [3. Componentes](plantuml/03-componentes.puml), [4. Clases](plantuml/04-clases.puml) y [6. Secuencia](plantuml/06-secuencia-publicar-aprobar.puml).
+
 ## 1. Contexto C4
 
 Muestra quién usa AutoMarket y para qué. En este nivel no se muestran paquetes ni archivos internos.
