@@ -1,0 +1,109 @@
+@startuml AutoMarket-Publicar-Aprobar
+title AutoMarket - Publicar y aprobar un vehículo
+autonumber
+
+skinparam shadowing false
+skinparam responseMessageBelowArrow true
+skinparam sequenceMessageAlign center
+
+actor V as "Vendedor"
+participant UI as "Interfaz web"
+participant API as "Backend Go/Gin"
+participant S as "Servicio"
+database D as "automarket.json"
+participant Sesiones as "Sesiones en memoria"
+database L as "audit.jsonl"
+actor A as "Administrador"
+actor X as "Visitante"
+
+== Registro e inicio de sesión del vendedor ==
+V -> UI : Completa el registro
+UI -> API : POST /api/sellers
+API -> S : Validar y registrar vendedor
+S -> D : Guardar usuario
+D --> S : Usuario guardado
+S --> API : Usuario creado
+API -> L : Registrar solicitud
+API --> UI : 201 Created
+UI --> V : Confirmar registro
+
+V -> UI : Ingresa correo y contraseña
+UI -> API : POST /api/sessions
+API -> S : Verificar credenciales
+S -> D : Buscar usuario
+D --> S : Usuario y hash guardado
+S -> Sesiones : Crear token de sesión
+Sesiones --> S : Token
+S --> API : Usuario y token
+API -> L : Registrar inicio de sesión
+API --> UI : 200 + token Bearer y rol
+
+== Publicación ==
+V -> UI : Envía datos del vehículo
+UI -> API : POST /api/vehicles + token
+API -> Sesiones : Validar token y rol seller
+Sesiones --> API : Identidad autenticada
+API -> S : Validar y crear publicación
+S -> D : Guardar estado pending
+D --> S : Publicación guardada
+S --> API : Publicación pendiente
+API -> L : Registrar actor y resultado
+API --> UI : 201 Created + publicación
+UI --> V : Mostrar que está pendiente
+
+== Moderación del administrador ==
+A -> API : POST /api/sessions
+API -> S : Verificar credenciales de administrador
+S -> D : Buscar administrador
+D --> S : Usuario y hash guardado
+S -> Sesiones : Crear token de sesión
+Sesiones --> S : Token
+S --> API : Token y rol admin
+API -> L : Registrar inicio de sesión
+API --> A : 200 + token Bearer
+
+A -> API : GET /api/admin/vehicles/pending + token
+API -> Sesiones : Validar token y rol admin
+Sesiones --> API : Identidad autenticada
+API -> S : Consultar publicaciones pendientes
+S -> D : Leer vehículos y vendedores
+D --> S : Lista de pendientes
+S --> API : Lista de pendientes
+API -> L : Registrar consulta
+API --> A : 200 + publicaciones pendientes
+
+A -> API : POST /api/admin/vehicles/{id}/approve + token
+API -> Sesiones : Validar token y rol admin
+Sesiones --> API : Identidad autenticada
+API -> S : Aprobar publicación
+S -> D : Cambiar estado a published
+D --> S : Estado actualizado
+S --> API : Aprobación completada
+API -> L : Registrar actor y resultado
+API --> A : 204 No Content
+
+== Consulta pública ==
+X -> UI : Abre el catálogo
+UI -> API : GET /api/vehicles
+API -> S : Consultar vehículos publicados
+S -> D : Leer vehículos y vendedores
+D --> S : Vehículos publicados y contactos
+S --> API : Catálogo público
+API -> L : Registrar consulta
+API --> UI : 200 + catálogo y contactos
+UI --> X : Mostrar ofertas y contacto
+
+== Reporte de venta ==
+V -> UI : Reporta la venta
+UI -> API : POST /api/vehicles/{id}/sale + token
+API -> Sesiones : Validar token y rol seller
+Sesiones --> API : Identidad autenticada
+API -> S : Marcar venta del vendedor
+S -> D : Cambiar estado a sold
+D --> S : Estado actualizado
+S --> API : Venta registrada
+API -> L : Registrar actor y resultado
+API --> UI : 204 No Content
+UI --> V : Confirmar reporte
+
+@enduml
