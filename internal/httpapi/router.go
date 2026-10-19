@@ -12,10 +12,13 @@ import (
 func NewRouter(app *service.Service, auditLogger *audit.Logger) *gin.Engine {
 	router := gin.New()
 	router.Use(auditMiddleware(auditLogger), gin.Recovery(), requestSizeLimit())
-	router.LoadHTMLFiles("web/templates/inicio.html")
+	router.LoadHTMLFiles("web/templates/inicio.html", "web/templates/login.html")
 	router.Static("/static", "web/static")
 	router.GET("/", func(c *gin.Context) {
 		c.HTML(http.StatusOK, "inicio.html", gin.H{"title": "AutoMarket"})
+	})
+	router.GET("/login", func(c *gin.Context) {
+		c.HTML(http.StatusOK, "login.html", gin.H{"title": "Iniciar sesión | AutoMarket"})
 	})
 	router.NoRoute(func(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "ruta no encontrada"})
