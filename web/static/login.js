@@ -16,19 +16,13 @@ form.addEventListener('submit', async (event) => {
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || 'No se pudo iniciar sesión.');
 
-        localStorage.setItem('automarket_token', result.token);
-        localStorage.setItem('token', result.token);
-        localStorage.setItem('automarket_user', JSON.stringify(result.user));
-        localStorage.setItem('user', JSON.stringify(result.user));
-        sessionStorage.setItem('automarket-token', result.token);
-
-        message.textContent = `Sesión iniciada como ${result.user.name} (${result.user.role}). Redirigiendo al catálogo...`;
+        localStorage.setItem('automarket.session', JSON.stringify({
+            token: result.token,
+            user: result.user,
+        }));
+        message.textContent = `Sesión iniciada como ${result.user.name} (${result.user.role}).`;
         message.classList.add('success');
-        form.reset();
-
-        setTimeout(() => {
-            window.location.href = '/';
-        }, 1000);
+        window.setTimeout(() => window.location.assign('/'), 700);
     } catch (error) {
         message.textContent = error.message || 'No se pudo conectar con el servidor.';
         message.classList.add('error');

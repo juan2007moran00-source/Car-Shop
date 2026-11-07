@@ -1,53 +1,117 @@
 # Guion para demostrar AutoMarket
 
-Abre dos ventanas de PowerShell. En la primera, desde la carpeta del proyecto, configura la cuenta administradora y deja el servidor en ejecución:
+Abre una ventana de PowerShell en la raíz del proyecto y deja el servidor en ejecución. Necesitas una base PostgreSQL creada (por ejemplo, `automarket`):
 
 ```powershell
-cd "$HOME\Documents\Car-Shop"
+$env:AUTOMARKET_DATABASE_URL = "postgres://root:root@localhost:5432/automarket?sslmode=disable"
 $env:ADMIN_EMAIL = "admin@automarket.local"
 $env:ADMIN_PASSWORD = "cambia-esta-clave-antes-de-usarla"
 go run ./cmd/web
 ```
 
-En la segunda ventana, registra un vendedor, inicia sesión y crea una publicación. Cambia el correo por uno que no esté guardado ya en `data/automarket.json`:
+Abre **https://localhost:8443** y acepta la advertencia del certificado autofirmado. La página muestra el catálogo público sin pedir registro.
+
+La aplicación crea las tablas automáticamente. Puedes ver los datos en pgAdmin o con `psql` (tablas `users`, `vehicles` y `vehicle_images`).
+
+## 1. Catálogo público y contacto (HU-VIS-01)
+
+En la página principal, sin iniciar sesión:
+
+1. Verifica que el catálogo carga y que el botón **Ingresar** es opcional.
+2. Abre un vehículo publicado.
+3. Comprueba que se muestran los datos del vehículo y el nombre, teléfono y correo del vendedor.
+
+También puedes comprobarlo por API:
 
 ```powershell
-$base = "http://localhost:8080"
-$seller = Invoke-RestMethod -Method Post -Uri "$base/api/sellers" -ContentType "application/json" -Body (@{
-    name = "Ana Pérez"; email = "ana@example.com"; phone = "+57 300 000 0000"; password = "clave-segura"
-} | ConvertTo-Json)
-$sellerSession = Invoke-RestMethod -Method Post -Uri "$base/api/sessions" -ContentType "application/json" -Body (@{
-    email = "ana@example.com"; password = "clave-segura"
-} | ConvertTo-Json)
-$sellerHeaders = @{ Authorization = "Bearer $($sellerSession.token)" }
-$vehicle = Invoke-RestMethod -Method Post -Uri "$base/api/vehicles" -Headers $sellerHeaders -ContentType "application/json" -Body (@{
-    make = "Renault"; model = "Logan"; year = 2020; price_cop = 42000000; description = "Buen estado"
-} | ConvertTo-Json)
-$vehicle.id
+$base = "https://localhost:8443"
+curl.exe -k -s "$base/api/vehicles"
 ```
 
-La respuesta de publicación debe mostrar el estado `pending`. Antes de aprobarla, `GET http://localhost:8080/api/vehicles` no debe incluirla.
+## 2. Registro y publicación con fotos (HU-VEN-01)
 
-Inicia sesión como administrador y aprueba la publicación pendiente:
+Registra un vendedor con un correo que no exista en la base de datos (tabla `users`):
 
 ```powershell
-$env:ADMIN_EMAIL = "admin@automarket.local"
-$env:ADMIN_PASSWORD = "usa-aqui-la-misma-clave-de-la-primera-ventana"
-$adminSession = Invoke-RestMethod -Method Post -Uri "$base/api/sessions" -ContentType "application/json" -Body (@{
-    email = $env:ADMIN_EMAIL; password = $env:ADMIN_PASSWORD
-} | ConvertTo-Json)
-$adminHeaders = @{ Authorization = "Bearer $($adminSession.token)" }
-$pending = Invoke-RestMethod -Method Get -Uri "$base/api/admin/vehicles/pending" -Headers $adminHeaders
+$seller = curl.exe -k -s -X POST "$base/api/sellers" `
+  -H "Content-Type: application/json" `
+  -d '{"name":"Ana Pérez","email":"ana@example.com","phone":"3001234567","password":"clave-segura"}' |
+  ConvertFrom-Json
+
+$session = curl.exe -k -s -X POST "$base/api/sessions" `
+  -H "Content-Type: application/json" `
+  -d '{"email":"ana@example.com","password":"clave-segura"}' |
+  ConvertFrom-Json
+
+$token = $session.token
+```
+
+Publica un vehículo con dos imágenes. Cambia las rutas por fotos reales en formato JPG o PNG. `cover_index=1` indica que la segunda imagen será la portada:
+
+```powershell
+$vehicle = curl.exe -k -s -X POST "$base/api/vehicles" `
+  -H "Authorization: Bearer $token" `
+  -F "make=Renault" `
+  -F "model=Logan" `
+  -F "year=2020" `
+  -F "price_cop=42000000" `
+  -F "description=Buen estado, único dueño." `
+  -F "cover_index=1" `
+  -F "images=@C:\ruta\foto-1.jpg;type=image/jpeg" `
+  -F "images=@C:\ruta\foto-2.jpg;type=image/jpeg" |
+  ConvertFrom-Json
+
+$vehicle | Select-Object id, status, cover_image_id
+$vehicle.images | Select-Object file_name, width, height, size_bytes
+```
+
+La respuesta debe mostrar `status: pending`. Antes de aprobarla, el catálogo público no debe incluirla:
+
+```powershell
+((curl.exe -k -s "$base/api/vehicles" | ConvertFrom-Json).vehicles).Count
+```
+
+Prueba también enviar un archivo que no sea JPG ni PNG (por ejemplo, un `.txt`). La API debe responder `400` con el motivo.
+
+En la interfaz web, el formulario permite seleccionar varias imágenes, muestra una vista previa y deja marcar cuál será la portada.
+
+## 3. Moderación (HU-ADM-01)
+
+Inicia sesión como administrador:
+
+```powershell
+$admin = curl.exe -k -s -X POST "$base/api/sessions" `
+  -H "Content-Type: application/json" `
+  -d '{"email":"admin@automarket.local","password":"cambia-esta-clave-antes-de-usarla"}' |
+  ConvertFrom-Json
+
+$adminHeaders = "Authorization: Bearer $($admin.token)"
+```
+
+Consulta pendientes y aprueba la publicación:
+
+```powershell
+$pending = curl.exe -k -s "$base/api/admin/vehicles/pending" -H $adminHeaders | ConvertFrom-Json
 $vehicleId = $pending.vehicles[0].id
-Invoke-RestMethod -Method Post -Uri "$base/api/admin/vehicles/$vehicleId/approve" -Headers $adminHeaders
-Invoke-RestMethod -Method Get -Uri "$base/api/vehicles"
+
+curl.exe -k -s -X POST "$base/api/admin/vehicles/$vehicleId/approve" -H $adminHeaders
 ```
 
-El catálogo público debe mostrar el vehículo y el contacto de Ana. Para reportar la venta, vuelve a usar el token del vendedor:
+El catálogo público ahora debe incluir el vehículo con sus imágenes y el contacto de Ana:
 
 ```powershell
-Invoke-RestMethod -Method Post -Uri "$base/api/vehicles/$vehicleId/sale" -Headers $sellerHeaders
-Invoke-RestMethod -Method Get -Uri "$base/api/vehicles"
+curl.exe -k -s "$base/api/vehicles"
 ```
 
-La publicación vendida deja de aparecer en el catálogo. En la carpeta `data`, cada petición queda registrada en la auditoría y el archivo de datos conserva vendedores y publicaciones después de reiniciar el servidor.
+En la interfaz, entra con la cuenta de administrador y usa las pestañas **Pendientes**, **Publicaciones** y **Usuarios** para aprobar o eliminar.
+
+## 4. Reportar la venta
+
+Vuelve a usar el token del vendedor:
+
+```powershell
+curl.exe -k -s -X POST "$base/api/vehicles/$vehicleId/sale" -H "Authorization: Bearer $token"
+curl.exe -k -s "$base/api/vehicles"
+```
+
+La publicación vendida deja de aparecer en el catálogo y el vendedor la ve como **Vendida** en su panel. Los usuarios y vehículos se conservan en PostgreSQL entre reinicios; las imágenes y la bitácora de auditoría, en la carpeta `data`.

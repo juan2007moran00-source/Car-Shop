@@ -3,490 +3,247 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#155eef">
-    <title>AutoMarket - Catálogo de Vehículos Usados</title>
-    <link rel="stylesheet" href="/static/estilos.css">
+    <meta name="description" content="AutoMarket: catálogo público de vehículos usados en venta. Consulta sin registrarte o publica tu vehículo.">
+    <meta name="theme-color" content="#11151c">
+    <title>AutoMarket | Compra y vende vehículos usados</title>
+    <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
-
-    <!-- Barra Superior de Navegación -->
-    <header class="topbar">
-        <a class="brand" href="/">Auto<span>Market</span></a>
-
-        <!-- Botones y Acciones en la Esquina Superior Derecha -->
-        <nav class="topbar-actions" aria-label="Navegación principal">
-            <!-- Estado Invitado: Siempre visible para usuarios no registrados -->
-            <div id="topbar-guest" class="topbar-actions">
-                <button type="button" class="button button-outline" onclick="openAuthModal('login')">Iniciar sesión</button>
-                <button type="button" class="button" onclick="openAuthModal('register')">Registrarse</button>
-            </div>
-
-            <!-- Estado Autenticado: Se activa dinámicamente si el usuario ya inició sesión -->
-            <div id="topbar-user" class="topbar-actions" style="display: none;">
-                <span class="user-greeting">
-                    Hola, <strong id="user-display-name">Usuario</strong>
-                    <span id="user-display-role" class="badge">ROL</span>
-                </span>
-
-                <!-- Acciones para VENDEDOR -->
-                <button type="button" id="btn-seller-warnings" class="button button-sm btn-warn" onclick="openSellerRequestsModal()" style="display: none;" title="Ver notificaciones del administrador">
-                    ⚠️ <span id="seller-warnings-count">0</span> Aviso(s)
-                </button>
-                <button type="button" id="btn-seller-requests" class="button button-outline button-sm" onclick="openSellerRequestsModal()" style="display: none;">
-                    📋 Mis Solicitudes
-                </button>
-                <button type="button" id="btn-publish-vehicle" class="button button-sm" onclick="openPublishModal()" style="display: none;">
-                    + Publicar vehículo
-                </button>
-
-                <!-- Acciones para ADMINISTRADOR -->
-                <button type="button" id="btn-admin-panel" class="button button-sm" onclick="openAdminModal()" style="display: none; background: #1e293b; border-color: #1e293b;">
-                    ⚙️ Panel de Administración
-                </button>
-
-                <button type="button" class="button button-outline button-sm button-danger" onclick="logout()">
-                    Cerrar sesión
-                </button>
-            </div>
+<header class="topbar">
+    <div class="topbar-inner">
+        <a class="brand" href="/" id="brand-link" aria-label="AutoMarket, ir al catálogo">Auto<span>Market</span></a>
+        <nav class="main-nav" aria-label="Navegación principal">
+            <button type="button" class="nav-link" data-nav="catalog" id="nav-catalog">Catálogo</button>
+            <button type="button" class="nav-link" id="nav-publish">Publicar vehículo</button>
+            <button type="button" class="nav-link nav-login" id="nav-auth">Ingresar</button>
+            <div id="nav-account" class="nav-account" hidden></div>
         </nav>
-    </header>
+    </div>
+</header>
 
-    <!-- Banner Principal y Barra de Búsqueda -->
-    <section class="hero-banner">
-        <div class="hero-banner-inner">
-            <div class="hero-eyebrow">Compra y Venta Directa</div>
-            <h1>Catálogo de Vehículos Usados</h1>
-            <p>Explora vehículos verificados por administradores y comunícate directamente con los vendedores sin intermediarios.</p>
-
-            <!-- Barra de Búsqueda y Filtros en Tiempo Real -->
-            <div class="filter-bar">
-                <div class="search-box">
-                    <span class="search-icon" aria-hidden="true">🔍</span>
-                    <input type="search" id="search-input" class="search-input" placeholder="Buscar por marca, modelo o año (ej: Renault, 2021)..." aria-label="Buscar vehículos">
+<main class="site-main">
+    <!-- VISTA PÚBLICA: el catálogo se muestra sin iniciar sesión. -->
+    <section class="view" id="catalog-view">
+        <div class="hero">
+            <div class="hero-copy">
+                <p class="eyebrow">Catálogo abierto · sin registro</p>
+                <h1>Encuentra tu próximo carro y habla directo con el vendedor.</h1>
+                <p class="intro">Explora vehículos usados publicados por vendedores verificados por nuestro equipo. Consultar es gratis y no necesitas crear una cuenta.</p>
+                <div class="hero-actions">
+                    <button type="button" class="button button-accent" id="hero-publish">Publicar mi vehículo</button>
+                    <a class="button button-ghost" href="#catalogo">Explorar el catálogo</a>
                 </div>
-                <select id="sort-select" class="sort-select" aria-label="Ordenar vehículos">
-                    <option value="recent">Más recientes</option>
-                    <option value="price-asc">Precio: menor a mayor</option>
-                    <option value="price-desc">Precio: mayor a menor</option>
-                    <option value="year-desc">Año: más nuevo a más antiguo</option>
-                </select>
+                <ul class="hero-points">
+                    <li><strong>0</strong><span>comisiones por consultar</span></li>
+                    <li><strong>100%</strong><span>contacto directo</span></li>
+                    <li><strong>Moderado</strong><span>por administradores</span></li>
+                </ul>
+            </div>
+            <div class="hero-art" aria-hidden="true">
+                <div class="plate">
+                    <small>COLOMBIA</small>
+                    <strong>AUTOMARKET</strong>
+                    <span>Vehículos usados</span>
+                </div>
+                <div class="hero-art-note">
+                    <span class="dot"></span>
+                    Publicaciones revisadas antes de salir al catálogo
+                </div>
+            </div>
+        </div>
+
+        <div class="catalog-section" id="catalogo">
+            <div class="section-head">
+                <div>
+                    <p class="eyebrow">Vehículos disponibles</p>
+                    <h2>Catálogo público</h2>
+                </div>
+                <div class="catalog-tools">
+                    <label class="search">
+                        <span class="sr-only">Buscar vehículos</span>
+                        <input id="catalog-search" type="search" placeholder="Buscar marca, modelo o año" autocomplete="off">
+                    </label>
+                    <span id="catalog-count" class="pill">0 vehículos</span>
+                </div>
+            </div>
+            <div id="catalog-grid" class="vehicle-grid" aria-live="polite"></div>
+            <div id="catalog-empty" class="empty-state" hidden>
+                <div class="empty-icon" aria-hidden="true">⌕</div>
+                <h3>No encontramos vehículos con ese criterio</h3>
+                <p>Prueba con otra búsqueda o vuelve más tarde: el catálogo se actualiza cuando el administrador aprueba publicaciones.</p>
             </div>
         </div>
     </section>
 
-    <!-- Sección del Catálogo Público -->
-    <main class="catalog-container">
-        <div class="catalog-header">
-            <h2 class="catalog-title">
-                Vehículos Publicados
-                <span id="vehicles-count" class="catalog-count">Cargando...</span>
-            </h2>
-        </div>
-
-        <!-- Estado de Carga -->
-        <div id="catalog-loading" class="catalog-status">
-            <span class="status-icon" aria-hidden="true">⏳</span>
-            <h3>Cargando catálogo...</h3>
-            <p>Obteniendo las mejores ofertas disponibles.</p>
-        </div>
-
-        <!-- Estado Vacío -->
-        <div id="catalog-empty" class="catalog-status" style="display: none;">
-            <span class="status-icon" aria-hidden="true">🚗</span>
-            <h3>No hay vehículos publicados</h3>
-            <p>Aún no hay publicaciones aprobadas en el catálogo. ¡Vuelve pronto o sé el primero en registrar un vehículo!</p>
-        </div>
-
-        <!-- Cuadrícula de Vehículos Públicos -->
-        <section id="vehicles-grid" class="vehicles-grid" aria-live="polite">
-            <!-- Las tarjetas se generan dinámicamente con catalogo.js -->
-        </section>
-    </main>
-
-    <!-- ==================== MODALES ==================== -->
-
-    <!-- 1. Modal de Autenticación (Iniciar Sesión / Registrarse) -->
-    <div id="auth-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
-        <div class="modal-card">
-            <div class="modal-head">
-                <h2 id="auth-modal-title">Tu cuenta en AutoMarket</h2>
-                <button type="button" class="modal-close" onclick="closeAuthModal()" aria-label="Cerrar modal">&times;</button>
+    <!-- VISTA DEL VENDEDOR: solo accesible con una cuenta de vendedor. -->
+    <section class="view dashboard" id="seller-view" hidden>
+        <div class="dashboard-head">
+            <div>
+                <p class="eyebrow">Panel del vendedor</p>
+                <h1>Hola, <span id="seller-name">vendedor</span>.</h1>
+                <p class="muted">Publica tu vehículo con fotos, revisa su estado y repórtalo cuando lo vendas.</p>
             </div>
-            <div class="modal-body">
-                <div class="modal-tabs">
-                    <button type="button" id="tab-btn-login" class="modal-tab-btn active" onclick="switchAuthTab('login')">Iniciar sesión</button>
-                    <button type="button" id="tab-btn-register" class="modal-tab-btn" onclick="switchAuthTab('register')">Registrarse</button>
+            <button type="button" class="button button-ghost button-sm" id="seller-logout">Cerrar sesión</button>
+        </div>
+
+        <div class="dashboard-grid">
+            <section class="card">
+                <div class="card-head">
+                    <div>
+                        <h2>Publicar vehículo</h2>
+                        <p class="muted">Tu publicación quedará pendiente hasta que un administrador la autorice.</p>
+                    </div>
+                    <span class="badge badge-pending">Pendiente de aprobación</span>
                 </div>
 
-                <!-- Formulario Iniciar Sesión -->
-                <form id="modal-form-login" onsubmit="handleModalLogin(event)">
-                    <div class="form-field">
-                        <label for="login-email">Correo electrónico</label>
-                        <input type="email" id="login-email" required placeholder="tu@correo.com" autocomplete="email">
+                <form id="publish-form" novalidate>
+                    <div class="form-row">
+                        <label class="field" for="v-make">
+                            <span>Marca *</span>
+                            <input id="v-make" name="make" type="text" maxlength="80" required placeholder="Ej.: Mazda">
+                        </label>
+                        <label class="field" for="v-model">
+                            <span>Modelo *</span>
+                            <input id="v-model" name="model" type="text" maxlength="120" required placeholder="Ej.: CX-30">
+                        </label>
                     </div>
-                    <div class="form-field">
-                        <label for="login-password">Contraseña</label>
-                        <input type="password" id="login-password" required placeholder="••••••••" autocomplete="current-password">
+                    <div class="form-row">
+                        <label class="field" for="v-year">
+                            <span>Año *</span>
+                            <input id="v-year" name="year" type="number" min="1886" required placeholder="2022">
+                        </label>
+                        <label class="field" for="v-price">
+                            <span>Precio en COP *</span>
+                            <input id="v-price" name="price_cop" type="number" min="1" step="1" required placeholder="85000000">
+                        </label>
                     </div>
-                    <button type="submit" class="button button-full">Ingresar</button>
+                    <label class="field" for="v-desc">
+                        <span>Descripción *</span>
+                        <textarea id="v-desc" name="description" rows="4" maxlength="1000" required placeholder="Estado, kilometraje, accesorios y cualquier detalle útil."></textarea>
+                    </label>
+
+                    <div class="upload-panel">
+                        <div class="upload-head">
+                            <div>
+                                <strong>Imágenes del vehículo</strong>
+                                <p class="hint">Imágenes JPG o PNG. Elige una como portada.</p>
+                            </div>
+                            <button type="button" class="button button-outline button-sm" id="pick-images">Elegir imágenes</button>
+                        </div>
+                        <input id="v-images" name="images" type="file" accept="image/jpeg,image/png" multiple hidden>
+                        <div id="image-preview" class="image-preview" hidden></div>
+                        <p id="image-error" class="form-error" role="alert" hidden></p>
+                    </div>
+
+                    <button type="submit" class="button button-accent button-full" id="publish-submit">Enviar a revisión</button>
+                    <p id="publish-alert" class="alert" role="status" hidden></p>
                 </form>
+            </section>
 
-                <!-- Formulario Registro de Vendedor -->
-                <form id="modal-form-register" onsubmit="handleModalRegister(event)" style="display: none;">
-                    <div class="form-field">
-                        <label for="reg-name">Nombre completo</label>
-                        <input type="text" id="reg-name" required placeholder="Ej: Ana Pérez" autocomplete="name">
+            <section class="card">
+                <div class="card-head">
+                    <div>
+                        <h2>Mis publicaciones</h2>
+                        <p class="muted">Las publicaciones vendidas dejan de aparecer en el catálogo.</p>
                     </div>
-                    <div class="form-field">
-                        <label for="reg-email">Correo electrónico</label>
-                        <input type="email" id="reg-email" required placeholder="ana@ejemplo.com" autocomplete="email">
-                    </div>
-                    <div class="form-field">
-                        <label for="reg-phone">Teléfono de contacto</label>
-                        <input type="tel" id="reg-phone" required placeholder="300 123 4567" autocomplete="tel">
-                    </div>
-                    <div class="form-field">
-                        <label for="reg-password">Contraseña (mínimo 8 caracteres)</label>
-                        <input type="password" id="reg-password" required minlength="8" placeholder="••••••••" autocomplete="new-password">
-                    </div>
-                    <button type="submit" class="button button-full">Crear cuenta de vendedor</button>
-                </form>
-
-                <div id="auth-alert" class="alert-message" role="alert"></div>
-            </div>
+                    <button type="button" class="button button-ghost button-sm" id="refresh-mine">Actualizar</button>
+                </div>
+                <div id="my-vehicles" class="stack" aria-live="polite"></div>
+            </section>
         </div>
-    </div>
+    </section>
 
-    <!-- 2. Modal para Publicar un Vehículo (Vendedor) -->
-    <div id="publish-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="publish-modal-title">
-        <div class="modal-card modal-card-lg">
-            <div class="modal-head">
-                <h2 id="publish-modal-title">Publicar nuevo vehículo</h2>
-                <button type="button" class="modal-close" onclick="closePublishModal()" aria-label="Cerrar modal">&times;</button>
+    <!-- VISTA DEL ADMINISTRADOR: moderación de publicaciones y usuarios. -->
+    <section class="view dashboard" id="admin-view" hidden>
+        <div class="dashboard-head">
+            <div>
+                <p class="eyebrow">Moderación</p>
+                <h1>Panel de administración</h1>
+                <p class="muted">Autoriza publicaciones y administra la comunidad de la plataforma.</p>
             </div>
-            <div class="modal-body modal-body-scroll">
-                <p class="muted" style="margin-top:0;">Completa todos los datos requeridos. Las fotografías y la ficha técnica son obligatorias para enviar la publicación a revisión.</p>
-                <form id="form-publish-vehicle" onsubmit="handlePublishVehicle(event)">
-                    
-                    <!-- Sección A: Fotografías Obligatorias -->
-                    <div class="form-section-title">📸 1. Fotografías del Vehículo (Obligatorio - 1 o más fotos) *</div>
-                    <div class="form-field">
-                        <div class="upload-box" onclick="document.getElementById('pub-images').click()">
-                            <span style="font-size: 2rem;">📷</span>
-                            <p style="margin: 4px 0 0; font-size: 0.92rem; font-weight: 700; color: #155eef;">
-                                Haz clic aquí para seleccionar fotografías
-                            </p>
-                            <p style="margin: 2px 0 0; font-size: 0.8rem; color: #64748b;">
-                                Formatos admitidos: JPG, PNG, WEBP. Puedes seleccionar varias imágenes a la vez.
-                            </p>
-                        </div>
-                        <input type="file" id="pub-images" multiple accept="image/jpeg,image/png,image/webp" required style="display:none;" onchange="handleImageSelection(event)">
-                        <div id="pub-images-preview" class="preview-strip" style="display:none;"></div>
-                    </div>
-
-                    <!-- Sección B: Información Comercial Básica -->
-                    <div class="form-section-title">🏷️ 2. Datos Principales del Vehículo *</div>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                        <div class="form-field">
-                            <label for="pub-make">Marca *</label>
-                            <input type="text" id="pub-make" required placeholder="Ej: Mazda">
-                        </div>
-                        <div class="form-field">
-                            <label for="pub-model">Modelo *</label>
-                            <input type="text" id="pub-model" required placeholder="Ej: CX-30">
-                        </div>
-                    </div>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                        <div class="form-field">
-                            <label for="pub-year">Año de Fabricación *</label>
-                            <input type="number" id="pub-year" required min="1886" max="2030" placeholder="2022">
-                        </div>
-                        <div class="form-field">
-                            <label for="pub-price">Precio en COP *</label>
-                            <input type="number" id="pub-price" required min="1" placeholder="85000000">
-                        </div>
-                    </div>
-                    <div class="form-field">
-                        <label for="pub-desc">Descripción detallada del estado del vehículo *</label>
-                        <textarea id="pub-desc" rows="3" required placeholder="Describe el estado de conservación, mantenimiento, procedencia y cualquier detalle relevante para los compradores..."></textarea>
-                    </div>
-
-                    <!-- Sección C: Ficha Técnica Exhaustiva y Obligatoria -->
-                    <div class="form-section-title">📋 3. Ficha Técnica y Especificaciones (Obligatorio) *</div>
-                    
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                        <div class="form-field">
-                            <label for="pub-engine">⚙️ Cilindrada del Motor *</label>
-                            <input type="text" id="pub-engine" required placeholder="Ej: 2.0L o 1998 cc">
-                        </div>
-                        <div class="form-field">
-                            <label for="pub-fuel">⛽ Tipo de Combustible *</label>
-                            <select id="pub-fuel" required class="sort-select" style="min-height: 42px;">
-                                <option value="">Selecciona combustible...</option>
-                                <option value="Gasolina Corriente">Gasolina Corriente</option>
-                                <option value="Gasolina Extra">Gasolina Extra</option>
-                                <option value="Diésel">Diésel</option>
-                                <option value="Híbrido">Híbrido</option>
-                                <option value="Eléctrico">Eléctrico</option>
-                                <option value="Gas Natural / Gasolina">Gas Natural / Gasolina</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                        <div class="form-field">
-                            <label for="pub-hp">🐎 Caballos de Fuerza (HP) *</label>
-                            <input type="number" id="pub-hp" required min="1" max="3000" placeholder="Ej: 153">
-                        </div>
-                        <div class="form-field">
-                            <label for="pub-torque">🔄 Torque en Newton-metro (Nm) *</label>
-                            <input type="number" id="pub-torque" required min="1" max="5000" placeholder="Ej: 200">
-                        </div>
-                    </div>
-
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                        <div class="form-field">
-                            <label for="pub-transmission">🕹️ Tipo de Transmisión *</label>
-                            <select id="pub-transmission" required class="sort-select" style="min-height: 42px;">
-                                <option value="">Selecciona transmisión...</option>
-                                <option value="Manual">Manual</option>
-                                <option value="Automática">Automática</option>
-                                <option value="Secuencial">Secuencial</option>
-                                <option value="CVT">CVT</option>
-                                <option value="Doble Embrague (DCT)">Doble Embrague (DCT)</option>
-                            </select>
-                        </div>
-                        <div class="form-field">
-                            <label for="pub-body">🚗 Tipo de Carrocería *</label>
-                            <select id="pub-body" required class="sort-select" style="min-height: 42px;">
-                                <option value="">Selecciona carrocería...</option>
-                                <option value="Sedán">Sedán</option>
-                                <option value="SUV">SUV</option>
-                                <option value="Hatchback">Hatchback</option>
-                                <option value="Camioneta">Camioneta</option>
-                                <option value="Pickup">Pickup</option>
-                                <option value="Coupé">Coupé</option>
-                                <option value="Convertible">Convertible</option>
-                                <option value="Van / Minivan">Van / Minivan</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
-                        <div class="form-field">
-                            <label for="pub-doors">🚪 Número de Puertas *</label>
-                            <input type="number" id="pub-doors" required min="1" max="10" placeholder="4" value="4">
-                        </div>
-                        <div class="form-field">
-                            <label for="pub-mileage">🛣️ Kilometraje (km) *</label>
-                            <input type="number" id="pub-mileage" required min="0" placeholder="Ej: 35000">
-                        </div>
-                        <div class="form-field">
-                            <label for="pub-color">🎨 Color Exterior *</label>
-                            <input type="text" id="pub-color" required placeholder="Ej: Rojo Diamante">
-                        </div>
-                    </div>
-
-                    <div class="form-field">
-                        <label for="pub-traction">🛞 Tipo de Tracción *</label>
-                        <select id="pub-traction" required class="sort-select" style="min-height: 42px;">
-                            <option value="">Selecciona tracción...</option>
-                            <option value="4x2 Delantera (FWD)">4x2 Delantera (FWD)</option>
-                            <option value="4x2 Trasera (RWD)">4x2 Trasera (RWD)</option>
-                            <option value="4x4 Conectable">4x4 Conectable</option>
-                            <option value="Tracción Integral (AWD)">Tracción Integral (AWD)</option>
-                        </select>
-                    </div>
-
-                    <button type="submit" class="button button-full" style="margin-top: 16px; padding: 14px; font-size: 1rem;">
-                        Enviar Publicación a Revisión
-                    </button>
-                </form>
-
-                <div id="publish-alert" class="alert-message" role="alert"></div>
-            </div>
+            <button type="button" class="button button-ghost button-sm" id="admin-logout">Cerrar sesión</button>
         </div>
-    </div>
 
-    <!-- 3. Modal de Solicitudes del Vendedor ("Mis Solicitudes") -->
-    <div id="seller-requests-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="seller-requests-title">
-        <div class="modal-card modal-card-lg">
-            <div class="modal-head">
-                <h2 id="seller-requests-title">Mis Solicitudes de Publicación y Venta</h2>
-                <button type="button" class="modal-close" onclick="closeSellerRequestsModal()" aria-label="Cerrar modal">&times;</button>
-            </div>
-            <div class="modal-body modal-body-scroll">
-                <!-- Banner de Advertencias / Notificaciones del Administrador -->
-                <div id="seller-warnings-banner" class="warning-banner" style="display: none;">
-                    <div class="warning-banner-title">
-                        ⚠️ Notificaciones y Advertencias del Administrador
-                    </div>
-                    <p style="margin:0 0 6px;">Se han registrado las siguientes alertas sobre tu cuenta por conductas o publicaciones a corregir:</p>
-                    <ul id="seller-warnings-list"></ul>
-                </div>
+        <div id="admin-stats" class="stats"></div>
 
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
-                    <p class="muted" style="margin:0;">Aquí puedes revisar el estado de tus solicitudes, modificar precio o descripción, o retirar publicaciones.</p>
-                    <button type="button" class="button button-sm" onclick="closeSellerRequestsModal(); openPublishModal();">+ Nueva Publicación</button>
-                </div>
-
-                <div id="seller-requests-loading" class="catalog-status" style="padding: 30px;">
-                    <span>Cargando tus solicitudes...</span>
-                </div>
-
-                <div id="seller-requests-empty" class="catalog-status" style="display: none; padding: 30px;">
-                    <span class="status-icon">📝</span>
-                    <h3>No tienes publicaciones registradas</h3>
-                    <p>Cuando publiques un vehículo, aparecerá aquí para que puedas gestionarlo.</p>
-                </div>
-
-                <div id="seller-requests-list">
-                    <!-- Tarjetas de solicitud renderizadas dinámicamente -->
-                </div>
-            </div>
+        <div class="tabs admin-tabs" role="tablist" aria-label="Secciones de administración">
+            <button type="button" class="tab active" data-admin-tab="pending" role="tab" aria-selected="true">Pendientes <span id="pending-count" class="tab-count">0</span></button>
+            <button type="button" class="tab" data-admin-tab="vehicles" role="tab" aria-selected="false">Publicaciones</button>
+            <button type="button" class="tab" data-admin-tab="users" role="tab" aria-selected="false">Usuarios</button>
         </div>
-    </div>
+        <div id="admin-panel" class="admin-panel" aria-live="polite"></div>
+    </section>
+</main>
 
-    <!-- 4. Modal para Editar Precio y Descripción de un Vehículo (Vendedor) -->
-    <div id="edit-vehicle-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="edit-vehicle-title">
-        <div class="modal-card">
-            <div class="modal-head">
-                <h2 id="edit-vehicle-title">Modificar Solicitud de Venta</h2>
-                <button type="button" class="modal-close" onclick="closeEditVehicleModal()" aria-label="Cerrar modal">&times;</button>
-            </div>
-            <div class="modal-body">
-                <p id="edit-vehicle-subtitle" class="muted" style="margin-top:0; font-weight:700; color:#1e293b;"></p>
-                <form id="form-edit-vehicle" onsubmit="handleEditVehicleSubmit(event)">
-                    <input type="hidden" id="edit-vehicle-id">
-                    <div class="form-field">
-                        <label for="edit-pub-price">Precio en COP</label>
-                        <input type="number" id="edit-pub-price" required min="1" placeholder="Ej: 45000000">
-                    </div>
-                    <div class="form-field">
-                        <label for="edit-pub-desc">Descripción</label>
-                        <textarea id="edit-pub-desc" rows="4" required placeholder="Actualiza el estado, características o detalles del vehículo..."></textarea>
-                    </div>
-                    <button type="submit" class="button button-full">Guardar Cambios</button>
-                </form>
-                <div id="edit-vehicle-alert" class="alert-message" role="alert"></div>
-            </div>
+<footer class="site-footer">
+    <span>AutoMarket · Catálogo de vehículos usados</span>
+    <span>Consulta libre. Publicar requiere una cuenta de vendedor.</span>
+</footer>
+
+<!-- Modal de autenticación opcional. -->
+<div class="modal" id="auth-modal" hidden>
+    <div class="modal-backdrop" data-close="auth-modal"></div>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+        <button type="button" class="modal-close" data-close="auth-modal" aria-label="Cerrar">×</button>
+        <p class="eyebrow" id="auth-kicker">Cuenta opcional</p>
+        <h2 id="auth-title">Ingresa o crea tu cuenta</h2>
+        <p class="muted" id="auth-context">Solo necesitas una cuenta para publicar vehículos. Explorar el catálogo y ver el contacto es libre.</p>
+
+        <div class="tabs" role="tablist" aria-label="Acceso o registro">
+            <button type="button" class="tab active" data-auth-tab="login" role="tab" aria-selected="true">Iniciar sesión</button>
+            <button type="button" class="tab" data-auth-tab="register" role="tab" aria-selected="false">Registrarme</button>
         </div>
+
+        <form id="login-form" class="auth-form">
+            <label class="field" for="login-email">
+                <span>Correo electrónico</span>
+                <input id="login-email" name="email" type="email" autocomplete="username" required placeholder="tu@correo.com">
+            </label>
+            <label class="field" for="login-password">
+                <span>Contraseña</span>
+                <input id="login-password" name="password" type="password" autocomplete="current-password" required placeholder="••••••••">
+            </label>
+            <button type="submit" class="button button-accent button-full">Entrar</button>
+        </form>
+
+        <form id="register-form" class="auth-form" hidden>
+            <div class="form-row">
+                <label class="field" for="reg-name">
+                    <span>Nombre completo</span>
+                    <input id="reg-name" name="name" type="text" autocomplete="name" maxlength="120" required placeholder="Juan Pérez">
+                </label>
+                <label class="field" for="reg-phone">
+                    <span>Teléfono de contacto</span>
+                    <input id="reg-phone" name="phone" type="tel" autocomplete="tel" maxlength="40" required placeholder="300 123 4567">
+                </label>
+            </div>
+            <label class="field" for="reg-email">
+                <span>Correo electrónico</span>
+                <input id="reg-email" name="email" type="email" autocomplete="email" required placeholder="tu@correo.com">
+            </label>
+            <label class="field" for="reg-password">
+                <span>Contraseña (mínimo 8 caracteres)</span>
+                <input id="reg-password" name="password" type="password" autocomplete="new-password" minlength="8" required placeholder="••••••••">
+            </label>
+            <p class="hint">Al registrarte aceptas que tus datos de contacto sean visibles para los visitantes del catálogo.</p>
+            <button type="submit" class="button button-accent button-full">Crear cuenta y entrar</button>
+        </form>
+
+        <p id="auth-alert" class="alert" role="status" hidden></p>
     </div>
+</div>
 
-    <!-- 5. Modal del Panel de Administración (ADMIN) -->
-    <div id="admin-panel-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="admin-panel-title">
-        <div class="modal-card modal-card-lg">
-            <div class="modal-head">
-                <h2 id="admin-panel-title">⚙️ Panel de Control del Administrador</h2>
-                <button type="button" class="modal-close" onclick="closeAdminModal()" aria-label="Cerrar panel">&times;</button>
-            </div>
-            <div class="modal-body modal-body-scroll">
-                <!-- Pestañas del Panel Admin -->
-                <div class="admin-tabs">
-                    <button type="button" id="admin-tab-btn-vehicles" class="admin-tab-btn active" onclick="switchAdminTab('vehicles')">
-                        🚗 Publicaciones y Vehículos (<span id="admin-count-vehicles">0</span>)
-                    </button>
-                    <button type="button" id="admin-tab-btn-sellers" class="admin-tab-btn" onclick="switchAdminTab('sellers')">
-                        👥 Gestión de Vendedores (<span id="admin-count-sellers">0</span>)
-                    </button>
-                </div>
-
-                <!-- Pestaña 1: Vehículos y Publicaciones -->
-                <div id="admin-sec-vehicles">
-                    <div class="admin-controls-bar">
-                        <div class="admin-filters-group">
-                            <input type="search" id="admin-search-vehicle" class="search-input" style="min-height:38px; width: 220px;" placeholder="Filtrar por marca, modelo o vendedor...">
-                            <select id="admin-filter-status" class="sort-select" style="min-height:38px;">
-                                <option value="all">Todos los estados</option>
-                                <option value="pending">🟡 Pendientes de aprobación</option>
-                                <option value="published">🟢 Publicados en catálogo</option>
-                                <option value="sold">⚪ Vendidos</option>
-                            </select>
-                        </div>
-                        <div class="view-toggle" role="group" aria-label="Modo de vista">
-                            <button type="button" id="admin-btn-grid" class="view-toggle-btn active" onclick="setAdminViewMode('grid')">
-                                🔲 Cuadrícula
-                            </button>
-                            <button type="button" id="admin-btn-list" class="view-toggle-btn" onclick="setAdminViewMode('list')">
-                                📄 Lista
-                            </button>
-                        </div>
-                    </div>
-
-                    <div id="admin-vehicles-loading" class="catalog-status" style="padding: 30px;">
-                        <span>Cargando vehículos para administración...</span>
-                    </div>
-
-                    <div id="admin-vehicles-empty" class="catalog-status" style="display: none; padding: 30px;">
-                        <h3>No hay vehículos que coincidan</h3>
-                        <p>No se encontraron publicaciones con los filtros seleccionados.</p>
-                    </div>
-
-                    <div id="admin-vehicles-content">
-                        <!-- Se llena con cuadrícula o tabla dinámica -->
-                    </div>
-                </div>
-
-                <!-- Pestaña 2: Gestión de Vendedores -->
-                <div id="admin-sec-sellers" style="display: none;">
-                    <p class="muted" style="margin-top:0;">Supervisa a los vendedores registrados. Puedes enviar advertencias éticas o bloquear cuentas en caso de infracciones graves.</p>
-                    
-                    <div id="admin-sellers-loading" class="catalog-status" style="padding: 30px;">
-                        <span>Cargando listado de vendedores...</span>
-                    </div>
-
-                    <div class="table-responsive">
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Vendedor</th>
-                                    <th>Contacto</th>
-                                    <th>Rol</th>
-                                    <th>Estado</th>
-                                    <th>Advertencias</th>
-                                    <th>Acciones</th>
-                                </tr>
-                            </thead>
-                            <tbody id="admin-sellers-table-body">
-                                <!-- Filas de vendedores generadas dinámicamente -->
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
+<!-- Modal de detalle del vehículo con contacto del vendedor. -->
+<div class="modal" id="detail-modal" hidden>
+    <div class="modal-backdrop" data-close="detail-modal"></div>
+    <div class="modal-card modal-wide" role="dialog" aria-modal="true" aria-labelledby="detail-title">
+        <button type="button" class="modal-close" data-close="detail-modal" aria-label="Cerrar">×</button>
+        <div id="detail-content"></div>
     </div>
+</div>
 
-    <!-- 6. Modal para Notificar / Advertir a un Vendedor -->
-    <div id="warn-user-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="warn-user-title">
-        <div class="modal-card">
-            <div class="modal-head">
-                <h2 id="warn-user-title">⚠️ Notificar Conducta a Vendedor</h2>
-                <button type="button" class="modal-close" onclick="closeWarnModal()" aria-label="Cerrar modal">&times;</button>
-            </div>
-            <div class="modal-body">
-                <p id="warn-user-target" class="muted" style="margin-top:0; font-weight:700; color:#1e293b;"></p>
-                <form id="form-warn-user" onsubmit="handleWarnUserSubmit(event)">
-                    <input type="hidden" id="warn-user-id">
-                    <div class="form-field">
-                        <label for="warn-user-message">Mensaje de notificación / infracción ética</label>
-                        <textarea id="warn-user-message" rows="4" required placeholder="Ejemplo: Se detectó una publicación engañosa de precio o incumplimiento de las políticas de la plataforma. Corrija los datos a la brevedad para evitar la suspensión definitiva de su cuenta."></textarea>
-                    </div>
-                    <button type="submit" class="button button-full" style="background:#b45309; border-color:#b45309;">
-                        Enviar Notificación Formal
-                    </button>
-                </form>
-                <div id="warn-user-alert" class="alert-message" role="alert"></div>
-            </div>
-        </div>
-    </div>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
-    <!-- Pie de página -->
-    <footer>
-        <p>&copy; AutoMarket - Plataforma de compra y venta de vehículos usados en Colombia.</p>
-    </footer>
-
-    <!-- Script del Catálogo y Lógica Frontend -->
-    <script src="/static/catalogo.js" defer></script>
+<script src="/static/app.js" defer></script>
 </body>
 </html>

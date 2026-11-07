@@ -1,13 +1,14 @@
-@startuml AutoMarket-Publicar-Aprobar
-title 6. Publicar y aprobar un vehículo
+@startuml AutoMarket-Comportamiento
+title Diagrama de comportamiento - Publicar, aprobar y consultar un vehículo
 autonumber
 skinparam shadowing false
 
 actor V as Vendedor
 participant UI as "Interfaz web"
-participant API as "Backend Go/Gin"
+participant API as "Backend Go/Gin (HTTPS)"
 participant S as Servicio
-database D as "automarket.json"
+participant M as "Almacén de imágenes"
+database D as "PostgreSQL"
 participant Sesiones as "Sesiones en memoria"
 database L as "audit.jsonl"
 actor A as Administrador
@@ -27,32 +28,34 @@ S -> D : Buscar usuario
 S -> Sesiones : Crear token
 API --> UI : Token Bearer
 
-V -> UI : Publica vehículo
-UI -> API : POST /api/vehicles + token
-API -> Sesiones : Validar token y rol seller
-API -> S : Crear publicación
-S -> D : Guardar estado pending
+V -> UI : Completa datos y carga fotos
+UI -> API : POST /api/vehicles + token (multipart)
+API -> Sesiones : Autenticar token
+API -> API : Autorizar rol seller
+API -> S : Validar datos y portada
+S -> M : Validar que sean JPG/PNG y guardar
+S -> D : Guardar estado pending e imágenes
 API -> L : Registrar operación
 API --> UI : 201 + publicación pendiente
 
-A -> API : Inicia sesión y obtiene token
-A -> API : GET /api/admin/vehicles/pending
-API -> Sesiones : Validar token y rol admin
+A -> API : GET /api/admin/vehicles/pending + token
+API -> Sesiones : Autenticar token
+API -> API : Autorizar rol admin
 API -> S : Consultar pendientes
-S -> D : Leer vehículos
+S -> D : Leer vehículos, imágenes y vendedores
+API -> L : Registrar operación
 API --> A : Lista de pendientes
 
 A -> API : POST /api/admin/vehicles/{id}/approve
-API -> Sesiones : Validar token y rol admin
 API -> S : Aprobar publicación
 S -> D : Cambiar estado a published
 API -> L : Registrar operación
 API --> A : 204 No Content
 
-X -> UI : Abre el catálogo
+X -> UI : Abre el catálogo sin registrarse
 UI -> API : GET /api/vehicles
 API -> S : Consultar publicados
 S -> D : Leer vehículos y vendedores
-API -> L : Registrar consulta
-API --> UI : Catálogo y contacto del vendedor
+API -> L : Registrar operación
+API --> UI : Catálogo, imágenes y contacto del vendedor
 @enduml

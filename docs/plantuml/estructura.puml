@@ -1,0 +1,38 @@
+@startuml AutoMarket-Estructura
+title Diagrama de estructura - AutoMarket
+left to right direction
+skinparam shadowing false
+skinparam componentStyle rectangle
+
+actor Visitante
+actor Vendedor
+actor Administrador
+
+component "Interfaz web\nHTML, CSS y JavaScript\nNavegador" as Web
+
+package "Backend Go + Gin (HTTPS)" {
+    component "Rutas, handlers,\nautenticación y autorización\ninternal/httpapi" as HTTP
+    component "Reglas del sistema\ninternal/service" as Service
+    component "Modelos\ninternal/domain" as Domain
+    component "Persistencia\ninternal/store" as Store
+    component "Validación y almacenamiento\nde imágenes\ninternal/media" as Media
+    component "Auditoría (accounting)\ninternal/audit" as AuditModule
+}
+
+database "PostgreSQL\nusuarios, vehículos\ny datos de imágenes" as Data
+database "data/uploads\narchivos JPG / PNG" as Photos
+database "data/audit.jsonl\ncadena de hashes" as Log
+
+Visitante --> Web : Consulta catálogo
+Vendedor --> Web : Registro y publicación
+Administrador --> Web : Moderación
+Web --> HTTP : HTTPS / JSON
+HTTP --> Service : Solicitudes autorizadas
+Service --> Domain : Usa modelos
+Service --> Store : Lee y guarda
+Service --> Media : Valida y guarda fotos
+Store --> Data : SQL
+Media --> Photos : Archivos
+HTTP --> AuditModule : Registra cada operación
+AuditModule --> Log : JSONL
+@enduml

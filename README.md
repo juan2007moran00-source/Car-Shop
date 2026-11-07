@@ -1,43 +1,95 @@
 # AutoMarket
 
-Página web sencilla para consultar carros y una API hecha en Go para registrar vendedores, publicar vehículos y administrarlos.
+Aplicación web en Go para consultar un catálogo público de vehículos usados, registrar vendedores, publicar vehículos con fotografías y moderar las publicaciones desde un panel de administración.
+
+## Funcionalidad
+
+- **Catálogo público sin registro (HU-VIS-01):** cualquier visitante puede ver los vehículos publicados y los datos de contacto del vendedor.
+- **Vendedor (HU-VEN-01):** se registra, publica vehículos con fotos (quedan pendientes de aprobación), ve el estado de sus publicaciones y reporta una venta para retirarla del catálogo.
+- **Administrador (HU-ADM-01):** autoriza las publicaciones pendientes y elimina publicaciones o usuarios.
+- **Seguridad AAA (RF-01):** autenticación con token Bearer, autorización por rol y bitácora de auditoría con cadena de hashes que registra cada operación.
+- **HTTPS:** el servidor usa TLS. En desarrollo genera un certificado autofirmado.
+- **Persistencia:** todos los usuarios y vehículos se guardan en PostgreSQL.
+
+## Imágenes
+
+- Se aceptan archivos **JPG o PNG**; se valida el contenido real del archivo, no solo la extensión.
+- Una de las imágenes cargadas se marca como portada.
+- Los archivos se guardan en `data/uploads/` y se sirven mediante `/media/{vehicleID}/{archivo}`. No están dentro de la carpeta pública de archivos estáticos.
+- En PostgreSQL solo se guardan los metadatos de cada imagen (`vehicle_images`).
 
 ## Iniciar el servidor
 
-Necesitas tener Go instalado. Abre PowerShell en la carpeta `Car-Shop` y ejecuta:
+Necesitas Go y una base de datos PostgreSQL. Crea la base y define las variables antes de arrancar (PowerShell, desde la raíz del repositorio):
 
 ```powershell
+docker exec pg_container psql -U root -d postgres -c "CREATE DATABASE automarket;"
+$env:AUTOMARKET_DATABASE_URL = "postgres://root:root@localhost:5432/automarket?sslmode=disable"
+$env:ADMIN_EMAIL = "admin@automarket.local"
+$env:ADMIN_PASSWORD = "una-clave-de-al-menos-8-caracteres"
 go run ./cmd/web
 ```
 
-Abre [http://localhost:8080](http://localhost:8080). La pantalla de acceso está en [http://localhost:8080/login](http://localhost:8080/login).
+Abre **https://localhost:8443**. En el primer arranque se genera un certificado autofirmado en `data/certs/`; el navegador mostrará una advertencia que debes aceptar para desarrollo local.
 
-Para detener el servidor, vuelve a PowerShell y presiona `Ctrl + C`.
+Al conectar, la aplicación crea automáticamente las tablas `users`, `vehicles` y `vehicle_images` si no existen (esquema en `internal/store/schema.sql`).
+
+### Variables de entorno
+
+| Variable | Valor por defecto | Uso |
+| --- | --- | --- |
+| `AUTOMARKET_DATABASE_URL` | — (obligatoria) | Cadena de conexión a PostgreSQL |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | — | Credenciales de la cuenta de administrador (se definen juntas) |
+| `AUTOMARKET_ADDR` | `:8443` | Dirección del servidor HTTPS |
+| `AUTOMARKET_CERT_DIR` | `data/certs` | Carpeta del certificado de desarrollo |
+| `AUTOMARKET_AUDIT_FILE` | `data/audit.jsonl` | Bitácora de auditoría |
+| `AUTOMARKET_MEDIA_DIR` | `data/uploads` | Almacenamiento privado de imágenes |
 
 ## Administrador
 
-El sistema cuenta con un usuario administrador predeterminado cuyas credenciales se encuentran en el archivo separado [`ADMIN_CREDENTIALS.md`](./ADMIN_CREDENTIALS.md) y [`ADMIN_CREDENTIALS.txt`](./ADMIN_CREDENTIALS.txt):
+La cuenta se crea la primera vez que arrancas con `ADMIN_EMAIL` y `ADMIN_PASSWORD`. Si el correo ya existe, su contraseña no se modifica; para cambiarla hay que actualizarla directamente en la tabla `users`.
 
-- **Correo**: `admin@automarket.local`
-- **Contraseña**: `AdminAutoMarket2026*`
+## Rutas principales
 
-Si deseas personalizar las credenciales del administrador antes de iniciar Go:
+| Método | Ruta | Acceso | Descripción |
+| --- | --- | --- | --- |
+| `GET` | `/api/vehicles` | Público | Catálogo de vehículos publicados con contacto |
+| `GET` | `/api/vehicles/:id` | Público | Detalle de un vehículo publicado |
+| `GET` | `/media/:vehicleID/:archivo` | Público | Imagen de una publicación |
+| `POST` | `/api/sellers` | Público | Registro de vendedor |
+| `POST` | `/api/sessions` | Público | Inicio de sesión |
+| `GET` | `/api/session` | Autenticado | Usuario de la sesión actual |
+| `DELETE` | `/api/session` | Autenticado | Cierre de sesión |
+| `GET` | `/api/seller/vehicles` | Vendedor | Publicaciones propias y su estado |
+| `POST` | `/api/vehicles` | Vendedor | Publicar vehículo (`multipart/form-data` con `images` y `cover_index`) |
+| `POST` | `/api/vehicles/:id/sale` | Vendedor | Reportar venta |
+| `GET` | `/api/admin/vehicles/pending` | Admin | Publicaciones pendientes |
+| `GET` | `/api/admin/vehicles` | Admin | Todas las publicaciones |
+| `POST` | `/api/admin/vehicles/:id/approve` | Admin | Aprobar publicación |
+| `DELETE` | `/api/admin/vehicles/:id` | Admin | Eliminar publicación |
+| `GET` | `/api/admin/users` | Admin | Listar usuarios |
+| `DELETE` | `/api/admin/users/:id` | Admin | Eliminar usuario y sus publicaciones |
 
-```powershell
-$env:ADMIN_EMAIL = "admin@automarket.local"
-$env:ADMIN_PASSWORD = "escribe-una-clave-de-al-menos-8-caracteres"
-go run ./cmd/web
-```
+La publicación recibe `multipart/form-data` con los campos `make`, `model`, `year`, `price_cop`, `description`, `cover_index` y uno o más archivos en `images`.
+
+## Demostración
+
+El flujo completo (registro, publicación con fotos, aprobación, contacto y venta) está descrito en [`docs/DEMO.md`](docs/DEMO.md).
+
+## Diagramas
+
+En `docs/plantuml/`: `estructura.puml` (diagrama de estructura) y `comportamiento.puml` (diagrama de comportamiento).
 
 ## Organización
 
-- `cmd/web`: inicia el servidor.
-- `internal/httpapi`: rutas y comunicación web.
+- `cmd/web`: arranque del servidor HTTPS y certificado de desarrollo.
+- `internal/httpapi`: rutas, autenticación, autorización y formularios multipart.
 - `internal/service`: reglas del sistema.
 - `internal/domain`: modelos de datos.
-- `internal/store`: guardado local.
+- `internal/store`: persistencia en PostgreSQL.
+- `internal/media`: validación y almacenamiento privado de imágenes.
 - `internal/audit`: registro de operaciones.
 - `web/templates`: páginas HTML.
 - `web/static`: CSS y JavaScript.
 
-Los datos locales se guardan en `data/` y Git los excluye.
+Los datos locales (imágenes, certificado y bitácora) se guardan en `data/` y Git los excluye.

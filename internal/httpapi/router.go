@@ -2,30 +2,28 @@ package httpapi
 
 import (
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/juan2007moran00-source/Car-Shop/internal/audit"
+	"github.com/juan2007moran00-source/Car-Shop/internal/media"
 	"github.com/juan2007moran00-source/Car-Shop/internal/service"
 )
 
-func NewRouter(app *service.Service, auditLogger *audit.Logger) *gin.Engine {
-	_ = os.MkdirAll("data/uploads", 0o755)
+const maxRequestBodyBytes = 40 << 20
+
+func NewRouter(app *service.Service, auditLogger *audit.Logger, mediaStore *media.Store) *gin.Engine {
 	router := gin.New()
-	router.Use(auditMiddleware(auditLogger), gin.Recovery(), requestSizeLimit())
-	router.LoadHTMLFiles("web/templates/inicio.html", "web/templates/login.html", "web/templates/vehiculo.html")
+	router.Use(securityHeaders(), auditMiddleware(auditLogger), gin.Recovery(), requestSizeLimit())
+	router.LoadHTMLFiles("web/templates/inicio.html", "web/templates/login.html")
 	router.Static("/static", "web/static")
-	router.Static("/uploads", "data/uploads")
 	router.GET("/", func(c *gin.Context) {
 		c.HTML(http.StatusOK, "inicio.html", gin.H{"title": "AutoMarket"})
 	})
 	router.GET("/login", func(c *gin.Context) {
 		c.HTML(http.StatusOK, "login.html", gin.H{"title": "Iniciar sesión | AutoMarket"})
 	})
-	router.GET("/vehiculo/:id", func(c *gin.Context) {
-		c.HTML(http.StatusOK, "vehiculo.html", gin.H{"title": "Detalle del Vehículo | AutoMarket"})
-	})
+	router.GET("/media/:vehicleID/:fileName", serveMedia(mediaStore))
 	router.NoRoute(func(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "ruta no encontrada"})
 	})
@@ -36,30 +34,42 @@ func NewRouter(app *service.Service, auditLogger *audit.Logger) *gin.Engine {
 		api.POST("/sessions", login(app))
 		api.GET("/vehicles", listPublicVehicles(app))
 		api.GET("/vehicles/:id", getPublicVehicle(app))
-		api.GET("/me", authentication(app), getMe(app))
-		api.POST("/uploads", authentication(app), uploadImages())
+
+		authenticated := api.Group("")
+		authenticated.Use(authentication(app))
+		authenticated.GET("/session", currentSession())
+		authenticated.DELETE("/session", logout(app))
 
 		seller := api.Group("")
 		seller.Use(authentication(app), requireRole("seller"))
-		seller.GET("/sellers/vehicles", listSellerVehicles(app))
+		seller.GET("/seller/vehicles", listSellerVehicles(app))
 		seller.POST("/vehicles", publishVehicle(app))
-		seller.PUT("/vehicles/:id", updateSellerVehicle(app))
-		seller.DELETE("/vehicles/:id", deleteSellerVehicle(app))
 		seller.POST("/vehicles/:id/sale", reportSale(app))
 
 		admin := api.Group("/admin")
 		admin.Use(authentication(app), requireRole("admin"))
 		admin.GET("/users", listUsers(app))
-		admin.POST("/users/:id/warn", warnUser(app))
-		admin.POST("/users/:id/block", blockUser(app))
-		admin.POST("/users/:id/unblock", unblockUser(app))
-		admin.GET("/vehicles", listAllVehiclesAdmin(app))
+		admin.GET("/vehicles", listAllVehicles(app))
 		admin.GET("/vehicles/pending", listPendingVehicles(app))
 		admin.POST("/vehicles/:id/approve", approveVehicle(app))
 		admin.DELETE("/vehicles/:id", deleteVehicle(app))
 		admin.DELETE("/users/:id", deleteUser(app))
 	}
 	return router
+}
+
+func securityHeaders() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Header("X-Content-Type-Options", "nosniff")
+		c.Header("X-Frame-Options", "DENY")
+		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
+		c.Header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+		c.Header("Content-Security-Policy", "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'")
+		if c.Request.TLS != nil {
+			c.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
+		c.Next()
+	}
 }
 
 func auditMiddleware(logger *audit.Logger) gin.HandlerFunc {
@@ -88,7 +98,7 @@ func auditMiddleware(logger *audit.Logger) gin.HandlerFunc {
 
 func requestSizeLimit() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 30<<20)
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxRequestBodyBytes)
 		c.Next()
 	}
 }

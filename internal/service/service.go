@@ -9,25 +9,27 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"net/mail"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/juan2007moran00-source/Car-Shop/internal/domain"
+	"github.com/juan2007moran00-source/Car-Shop/internal/media"
 	"github.com/juan2007moran00-source/Car-Shop/internal/store"
 )
 
 var (
 	ErrInvalidInput       = errors.New("datos inválidos")
 	ErrInvalidCredentials = errors.New("correo o contraseña inválidos")
-	ErrUserBlocked        = errors.New("tu cuenta ha sido bloqueada por un administrador")
 )
 
 const passwordIterations = 600_000
 
 type Service struct {
-	store     *store.Store
+	store     store.Repository
+	media     *media.Store
 	sessions  map[string]string
 	sessionMu sync.RWMutex
 }
@@ -45,12 +47,16 @@ type VehicleInput struct {
 	Year        int
 	PriceCOP    int64
 	Description string
-	Images      []string
-	Specs       domain.TechnicalSpecs
 }
 
-func New(dataStore *store.Store) *Service {
-	return &Service{store: dataStore, sessions: make(map[string]string)}
+// ImageUpload representa un archivo multipart que todavía no se ha guardado.
+type ImageUpload struct {
+	Name   string
+	Reader io.Reader
+}
+
+func New(dataStore store.Repository, mediaStore *media.Store) *Service {
+	return &Service{store: dataStore, media: mediaStore, sessions: make(map[string]string)}
 }
 
 func (s *Service) EnsureAdmin(email, password string) error {
@@ -102,9 +108,6 @@ func (s *Service) Login(email, password string) (domain.User, string, error) {
 	if !ok {
 		return domain.User{}, "", ErrInvalidCredentials
 	}
-	if user.IsBlocked {
-		return domain.User{}, "", ErrUserBlocked
-	}
 	salt, err := hex.DecodeString(user.PasswordSalt)
 	if err != nil {
 		return domain.User{}, "", ErrInvalidCredentials
@@ -138,21 +141,18 @@ func (s *Service) Authenticate(token string) (domain.User, bool) {
 		return domain.User{}, false
 	}
 	user, ok := s.store.UserByID(userID)
-	if !ok || user.IsBlocked {
-		return domain.User{}, false
-	}
-	return user, true
+	return user, ok
+}
+
+func (s *Service) Logout(token string) {
+	tokenHash := sha256.Sum256([]byte(token))
+	s.sessionMu.Lock()
+	delete(s.sessions, hex.EncodeToString(tokenHash[:]))
+	s.sessionMu.Unlock()
 }
 
 func (s *Service) PublicVehicles() []domain.PublicVehicle {
-	vehicles := s.store.VehiclesByStatus(domain.VehiclePublished)
-	result := make([]domain.PublicVehicle, 0, len(vehicles))
-	for _, vehicle := range vehicles {
-		if publicVehicle, ok := s.withSeller(vehicle); ok {
-			result = append(result, publicVehicle)
-		}
-	}
-	return result
+	return s.publicVehicles(s.store.VehiclesByStatus(domain.VehiclePublished))
 }
 
 func (s *Service) PublicVehicle(id string) (domain.PublicVehicle, error) {
@@ -168,7 +168,18 @@ func (s *Service) PublicVehicle(id string) (domain.PublicVehicle, error) {
 }
 
 func (s *Service) PendingVehicles() []domain.PublicVehicle {
-	vehicles := s.store.VehiclesByStatus(domain.VehiclePending)
+	return s.publicVehicles(s.store.VehiclesByStatus(domain.VehiclePending))
+}
+
+func (s *Service) SellerVehicles(sellerID string) []domain.PublicVehicle {
+	return s.publicVehicles(s.store.VehiclesBySeller(sellerID))
+}
+
+func (s *Service) AllVehicles() []domain.PublicVehicle {
+	return s.publicVehicles(s.store.AllVehicles())
+}
+
+func (s *Service) publicVehicles(vehicles []domain.Vehicle) []domain.PublicVehicle {
 	result := make([]domain.PublicVehicle, 0, len(vehicles))
 	for _, vehicle := range vehicles {
 		if publicVehicle, ok := s.withSeller(vehicle); ok {
@@ -182,41 +193,7 @@ func (s *Service) Users() []domain.User {
 	return s.store.Users()
 }
 
-func validateSpecs(specs domain.TechnicalSpecs) bool {
-	if strings.TrimSpace(specs.EngineDisplacement) == "" || len(specs.EngineDisplacement) > 40 {
-		return false
-	}
-	if strings.TrimSpace(specs.FuelType) == "" || len(specs.FuelType) > 40 {
-		return false
-	}
-	if specs.Horsepower <= 0 || specs.Horsepower > 3000 {
-		return false
-	}
-	if specs.TorqueNM <= 0 || specs.TorqueNM > 5000 {
-		return false
-	}
-	if strings.TrimSpace(specs.Transmission) == "" || len(specs.Transmission) > 40 {
-		return false
-	}
-	if strings.TrimSpace(specs.BodyType) == "" || len(specs.BodyType) > 40 {
-		return false
-	}
-	if specs.Doors <= 0 || specs.Doors > 10 {
-		return false
-	}
-	if specs.MileageKM < 0 || specs.MileageKM > 2000000 {
-		return false
-	}
-	if strings.TrimSpace(specs.Color) == "" || len(specs.Color) > 40 {
-		return false
-	}
-	if strings.TrimSpace(specs.Traction) == "" || len(specs.Traction) > 40 {
-		return false
-	}
-	return true
-}
-
-func (s *Service) PublishVehicle(sellerID string, input VehicleInput) (domain.Vehicle, error) {
+func (s *Service) PublishVehicle(sellerID string, input VehicleInput, uploads []ImageUpload, coverIndex int) (domain.Vehicle, error) {
 	makeName := strings.TrimSpace(input.Make)
 	model := strings.TrimSpace(input.Model)
 	description := strings.TrimSpace(input.Description)
@@ -224,38 +201,49 @@ func (s *Service) PublishVehicle(sellerID string, input VehicleInput) (domain.Ve
 		input.Year < 1886 || input.Year > time.Now().Year()+1 || input.PriceCOP <= 0 || len(description) > 1000 {
 		return domain.Vehicle{}, ErrInvalidInput
 	}
-	if len(input.Images) == 0 {
-		return domain.Vehicle{}, ErrInvalidInput
-	}
-	for _, img := range input.Images {
-		if strings.TrimSpace(img) == "" {
-			return domain.Vehicle{}, ErrInvalidInput
-		}
-	}
-	if !validateSpecs(input.Specs) {
-		return domain.Vehicle{}, ErrInvalidInput
-	}
 	if seller, ok := s.store.UserByID(sellerID); !ok || seller.Role != domain.RoleSeller {
 		return domain.Vehicle{}, store.ErrNotFound
+	}
+	if len(uploads) > 0 && s.media == nil {
+		return domain.Vehicle{}, ErrInvalidInput
+	}
+	if len(uploads) > 0 && (coverIndex < 0 || coverIndex >= len(uploads)) {
+		return domain.Vehicle{}, ErrInvalidInput
 	}
 	id, err := newID()
 	if err != nil {
 		return domain.Vehicle{}, err
 	}
+
+	images := make([]domain.VehicleImage, 0, len(uploads))
+	coverImageID := ""
+	for index, upload := range uploads {
+		image, err := s.media.Save(id, upload.Reader)
+		if err != nil {
+			s.deleteMedia(id)
+			return domain.Vehicle{}, err
+		}
+		images = append(images, image)
+		if index == coverIndex {
+			coverImageID = image.ID
+		}
+	}
+
 	vehicle := domain.Vehicle{
-		ID:          id,
-		Make:        makeName,
-		Model:       model,
-		Year:        input.Year,
-		PriceCOP:    input.PriceCOP,
-		Description: description,
-		Images:      input.Images,
-		Specs:       input.Specs,
-		SellerID:    sellerID,
-		Status:      domain.VehiclePending,
-		CreatedAt:   time.Now().UTC(),
+		ID:           id,
+		Make:         makeName,
+		Model:        model,
+		Year:         input.Year,
+		PriceCOP:     input.PriceCOP,
+		Description:  description,
+		SellerID:     sellerID,
+		Status:       domain.VehiclePending,
+		Images:       images,
+		CoverImageID: coverImageID,
+		CreatedAt:    time.Now().UTC(),
 	}
 	if err := s.store.CreateVehicle(vehicle); err != nil {
+		s.deleteMedia(id)
 		return domain.Vehicle{}, fmt.Errorf("guardar vehículo: %w", err)
 	}
 	return vehicle, nil
@@ -270,10 +258,18 @@ func (s *Service) ApproveVehicle(vehicleID string) error {
 }
 
 func (s *Service) DeleteVehicle(vehicleID string) error {
-	return s.store.DeleteVehicle(vehicleID)
+	if _, ok := s.store.VehicleByID(vehicleID); !ok {
+		return store.ErrNotFound
+	}
+	if err := s.store.DeleteVehicle(vehicleID); err != nil {
+		return err
+	}
+	s.deleteMedia(vehicleID)
+	return nil
 }
 
 func (s *Service) DeleteUser(userID string) error {
+	vehicles := s.store.VehiclesBySeller(userID)
 	if err := s.store.DeleteUser(userID); err != nil {
 		return err
 	}
@@ -284,71 +280,16 @@ func (s *Service) DeleteUser(userID string) error {
 		}
 	}
 	s.sessionMu.Unlock()
+	for _, vehicle := range vehicles {
+		s.deleteMedia(vehicle.ID)
+	}
 	return nil
 }
 
-func (s *Service) SellerVehicles(sellerID string) []domain.Vehicle {
-	return s.store.VehiclesBySeller(sellerID)
-}
-
-func (s *Service) UpdateVehicle(sellerID, vehicleID string, priceCOP int64, description string, images []string, specs domain.TechnicalSpecs) (domain.Vehicle, error) {
-	description = strings.TrimSpace(description)
-	if priceCOP <= 0 || len(description) > 1000 {
-		return domain.Vehicle{}, ErrInvalidInput
+func (s *Service) deleteMedia(vehicleID string) {
+	if s.media != nil {
+		_ = s.media.DeleteVehicle(vehicleID)
 	}
-	if len(images) > 0 {
-		for _, img := range images {
-			if strings.TrimSpace(img) == "" {
-				return domain.Vehicle{}, ErrInvalidInput
-			}
-		}
-	}
-	if specs.EngineDisplacement != "" && !validateSpecs(specs) {
-		return domain.Vehicle{}, ErrInvalidInput
-	}
-	return s.store.UpdateVehicleDetails(vehicleID, sellerID, priceCOP, description, images, specs)
-}
-
-func (s *Service) DeleteSellerVehicle(sellerID, vehicleID string) error {
-	return s.store.DeleteSellerVehicle(vehicleID, sellerID)
-}
-
-func (s *Service) AdminAllVehicles() []domain.PublicVehicle {
-	vehicles := s.store.AllVehicles()
-	result := make([]domain.PublicVehicle, 0, len(vehicles))
-	for _, vehicle := range vehicles {
-		if publicVehicle, ok := s.withSeller(vehicle); ok {
-			result = append(result, publicVehicle)
-		}
-	}
-	return result
-}
-
-func (s *Service) BlockUser(userID string) (domain.User, error) {
-	user, err := s.store.SetUserBlocked(userID, true)
-	if err != nil {
-		return domain.User{}, err
-	}
-	s.sessionMu.Lock()
-	for tokenHash, id := range s.sessions {
-		if id == userID {
-			delete(s.sessions, tokenHash)
-		}
-	}
-	s.sessionMu.Unlock()
-	return user, nil
-}
-
-func (s *Service) UnblockUser(userID string) (domain.User, error) {
-	return s.store.SetUserBlocked(userID, false)
-}
-
-func (s *Service) WarnUser(userID, message string) (domain.User, error) {
-	message = strings.TrimSpace(message)
-	if message == "" || len(message) > 500 {
-		return domain.User{}, ErrInvalidInput
-	}
-	return s.store.AddUserWarning(userID, message)
 }
 
 func (s *Service) withSeller(vehicle domain.Vehicle) (domain.PublicVehicle, bool) {
@@ -356,21 +297,32 @@ func (s *Service) withSeller(vehicle domain.Vehicle) (domain.PublicVehicle, bool
 	if !ok {
 		return domain.PublicVehicle{}, false
 	}
-	images := vehicle.Images
-	if images == nil {
-		images = []string{}
+	images := make([]domain.PublicImage, 0, len(vehicle.Images))
+	for _, image := range vehicle.Images {
+		if image.FileName == "" {
+			continue
+		}
+		images = append(images, domain.PublicImage{
+			ID:          image.ID,
+			URL:         "/media/" + vehicle.ID + "/" + image.FileName,
+			ContentType: image.ContentType,
+			Width:       image.Width,
+			Height:      image.Height,
+			SizeBytes:   image.SizeBytes,
+			Cover:       image.ID == vehicle.CoverImageID,
+		})
 	}
 	return domain.PublicVehicle{
-		ID:          vehicle.ID,
-		Make:        vehicle.Make,
-		Model:       vehicle.Model,
-		Year:        vehicle.Year,
-		PriceCOP:    vehicle.PriceCOP,
-		Description: vehicle.Description,
-		Images:      images,
-		Specs:       vehicle.Specs,
-		Status:      vehicle.Status,
-		CreatedAt:   vehicle.CreatedAt,
+		ID:           vehicle.ID,
+		Make:         vehicle.Make,
+		Model:        vehicle.Model,
+		Year:         vehicle.Year,
+		PriceCOP:     vehicle.PriceCOP,
+		Description:  vehicle.Description,
+		Status:       vehicle.Status,
+		Images:       images,
+		CoverImageID: vehicle.CoverImageID,
+		CreatedAt:    vehicle.CreatedAt,
 		Seller: domain.SellerContact{
 			Name:  seller.Name,
 			Email: seller.Email,
@@ -400,8 +352,6 @@ func newUser(name, email, phone string, role domain.Role, password string) (doma
 		Role:         role,
 		PasswordSalt: hex.EncodeToString(salt),
 		PasswordHash: hex.EncodeToString(passwordHash),
-		IsBlocked:    false,
-		Warnings:     []string{},
 		CreatedAt:    time.Now().UTC(),
 	}, nil
 }
