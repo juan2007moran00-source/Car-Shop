@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#155eef">
+    <title>Detalle del Vehículo | AutoMarket</title>
+    <link rel="stylesheet" href="/static/estilos.css">
+</head>
+<body>
+
+    <!-- Barra Superior de Navegación -->
+    <header class="topbar">
+        <a class="brand" href="/">Auto<span>Market</span></a>
+
+        <nav class="topbar-actions" aria-label="Navegación principal">
+            <a href="/" class="button button-outline button-sm">← Volver al catálogo</a>
+
+            <!-- Estado Invitado -->
+            <div id="topbar-guest" class="topbar-actions">
+                <button type="button" class="button button-outline button-sm" onclick="openAuthModal('login')">Iniciar sesión</button>
+                <button type="button" class="button button-sm" onclick="openAuthModal('register')">Registrarse</button>
+            </div>
+
+            <!-- Estado Autenticado -->
+            <div id="topbar-user" class="topbar-actions" style="display: none;">
+                <span class="user-greeting">
+                    Hola, <strong id="user-display-name">Usuario</strong>
+                    <span id="user-display-role" class="badge">ROL</span>
+                </span>
+                <button type="button" class="button button-outline button-sm button-danger" onclick="logout()">
+                    Cerrar sesión
+                </button>
+            </div>
+        </nav>
+    </header>
+
+    <!-- Contenedor Principal del Detalle -->
+    <main class="detail-container">
+        <!-- Navegación de migas de pan -->
+        <nav class="breadcrumb" aria-label="Ruta">
+            <a href="/">Catálogo</a>
+            <span>›</span>
+            <span id="breadcrumb-vehicle-name">Cargando vehículo...</span>
+        </nav>
+
+        <!-- Estado de Carga -->
+        <div id="detail-loading" class="catalog-status" style="margin: 40px 0;">
+            <span class="status-icon" aria-hidden="true">⏳</span>
+            <h3>Cargando información del vehículo...</h3>
+            <p>Obteniendo fotografías y ficha técnica completa.</p>
+        </div>
+
+        <!-- Estado de Error / No Encontrado -->
+        <div id="detail-error" class="catalog-status" style="display: none; margin: 40px 0;">
+            <span class="status-icon" aria-hidden="true">🚗</span>
+            <h3 id="detail-error-title">Vehículo no disponible</h3>
+            <p id="detail-error-msg">El vehículo solicitado no existe o ya no se encuentra publicado en el catálogo.</p>
+            <div style="margin-top: 18px;">
+                <a href="/" class="button">Ver otros vehículos en el catálogo</a>
+            </div>
+        </div>
+
+        <!-- Vista Completa del Vehículo (Se activa dinámicamente) -->
+        <div id="detail-content" style="display: none;">
+            
+            <div class="detail-grid">
+                <!-- Columna Izquierda: Slider / Carrusel Deslizable de Fotos -->
+                <section class="gallery-section" aria-label="Galería de fotografías">
+                    <div class="slider-viewport" id="slider-viewport">
+                        <img id="slider-main-img" src="" alt="Fotografía del vehículo" class="slider-active-img">
+                        
+                        <!-- Controles de Navegación del Slider -->
+                        <button type="button" class="slider-nav-btn prev" id="slider-btn-prev" onclick="prevSlide()" aria-label="Foto anterior">‹</button>
+                        <button type="button" class="slider-nav-btn next" id="slider-btn-next" onclick="nextSlide()" aria-label="Foto siguiente">›</button>
+                        
+                        <!-- Indicador de Foto Actual -->
+                        <div class="slider-counter" id="slider-counter">Foto 1 de 1</div>
+                    </div>
+
+                    <!-- Fila de Miniaturas Clicables -->
+                    <div class="thumbnails-strip" id="thumbnails-strip" role="tablist" aria-label="Miniaturas de fotos">
+                        <!-- Miniaturas insertadas dinámicamente -->
+                    </div>
+                </section>
+
+                <!-- Columna Derecha: Información Principal y Contacto -->
+                <section class="info-section">
+                    <div class="detail-header-card">
+                        <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px;">
+                            <span class="status-pill published">🟢 Publicado</span>
+                            <span class="year-badge" id="detail-badge-year">2022</span>
+                            <span class="year-badge" id="detail-badge-body" style="background:#e0f2fe; color:#0369a1;">Carrocería</span>
+                        </div>
+
+                        <h1 class="detail-title" id="detail-vehicle-title">Marca Modelo</h1>
+                        <div class="detail-price" id="detail-vehicle-price">$ 0 COP</div>
+
+                        <div class="detail-quick-specs">
+                            <span class="quick-spec-item" id="quick-spec-km">🛣️ 0 km</span>
+                            <span class="quick-spec-item" id="quick-spec-fuel">⛽ Gasolina</span>
+                            <span class="quick-spec-item" id="quick-spec-trans">🕹️ Automática</span>
+                        </div>
+                    </div>
+
+                    <!-- Caja de Contacto Directo con el Vendedor -->
+                    <div class="seller-contact-card">
+                        <span class="seller-box-title">Vendedor del vehículo</span>
+                        <div class="seller-box-name" id="detail-seller-name">Nombre del Vendedor</div>
+                        
+                        <div class="seller-contact-buttons">
+                            <a id="btn-seller-phone" href="#" class="button button-outline button-full" style="justify-content: flex-start; gap: 10px;">
+                                <span>📞</span> <span id="detail-seller-phone">Llamar al vendedor</span>
+                            </a>
+                            <a id="btn-seller-email" href="#" class="button button-outline button-full" style="justify-content: flex-start; gap: 10px;">
+                                <span>✉️</span> <span id="detail-seller-email">Enviar correo electrónico</span>
+                            </a>
+                            <a id="btn-seller-whatsapp" href="#" target="_blank" class="button button-full" style="background: #25d366; border-color: #25d366; gap: 8px;">
+                                <span>💬</span> Contactar por WhatsApp
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Descripción del Vehículo -->
+                    <div class="description-card">
+                        <h3>Descripción del vehículo</h3>
+                        <p id="detail-description-text" class="detail-desc-paragraph"></p>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Ficha Técnica Completa y Obligatoria -->
+            <section class="specs-section">
+                <div class="specs-header">
+                    <h2>📋 Ficha Técnica y Especificaciones</h2>
+                    <p class="muted" style="margin: 4px 0 0;">Datos técnicos verificados por el vendedor de esta publicación.</p>
+                </div>
+
+                <div class="specs-grid" id="specs-grid">
+                    <!-- Ficha técnica renderizada dinámicamente -->
+                </div>
+            </section>
+
+        </div>
+    </main>
+
+    <!-- Pie de página -->
+    <footer>
+        <p>&copy; AutoMarket - Plataforma de compra y venta de vehículos usados en Colombia.</p>
+    </footer>
+
+    <!-- Script de Detalle y Slider -->
+    <script src="/static/vehiculo.js" defer></script>
+</body>
+</html>
+

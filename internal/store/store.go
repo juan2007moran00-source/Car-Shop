@@ -50,9 +50,15 @@ func New(path string) (*Store, error) {
 		return nil, err
 	}
 	for _, user := range saved.Users {
+		if user.Warnings == nil {
+			user.Warnings = []string{}
+		}
 		s.users[user.ID] = user
 	}
 	for _, vehicle := range saved.Vehicles {
+		if vehicle.Images == nil {
+			vehicle.Images = []string{}
+		}
 		s.vehicles[vehicle.ID] = vehicle
 	}
 	return s, nil
@@ -192,6 +198,130 @@ func (s *Store) DeleteVehicle(id string) error {
 		return err
 	}
 	return nil
+}
+
+func (s *Store) AllVehicles() []domain.Vehicle {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	vehicles := make([]domain.Vehicle, 0, len(s.vehicles))
+	for _, vehicle := range s.vehicles {
+		vehicles = append(vehicles, vehicle)
+	}
+	sort.Slice(vehicles, func(i, j int) bool {
+		return vehicles[i].CreatedAt.After(vehicles[j].CreatedAt)
+	})
+	return vehicles
+}
+
+func (s *Store) VehiclesBySeller(sellerID string) []domain.Vehicle {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	vehicles := make([]domain.Vehicle, 0)
+	for _, vehicle := range s.vehicles {
+		if vehicle.SellerID == sellerID {
+			vehicles = append(vehicles, vehicle)
+		}
+	}
+	sort.Slice(vehicles, func(i, j int) bool {
+		return vehicles[i].CreatedAt.After(vehicles[j].CreatedAt)
+	})
+	return vehicles
+}
+
+func (s *Store) UpdateVehiclePriceAndDescription(id, sellerID string, priceCOP int64, description string) (domain.Vehicle, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	vehicle, ok := s.vehicles[id]
+	if !ok || vehicle.SellerID != sellerID {
+		return domain.Vehicle{}, ErrNotFound
+	}
+	oldPrice := vehicle.PriceCOP
+	oldDesc := vehicle.Description
+	vehicle.PriceCOP = priceCOP
+	vehicle.Description = description
+	s.vehicles[id] = vehicle
+	if err := s.saveLocked(); err != nil {
+		vehicle.PriceCOP = oldPrice
+		vehicle.Description = oldDesc
+		s.vehicles[id] = vehicle
+		return domain.Vehicle{}, err
+	}
+	return vehicle, nil
+}
+
+func (s *Store) UpdateVehicleDetails(id, sellerID string, priceCOP int64, description string, images []string, specs domain.TechnicalSpecs) (domain.Vehicle, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	vehicle, ok := s.vehicles[id]
+	if !ok || vehicle.SellerID != sellerID {
+		return domain.Vehicle{}, ErrNotFound
+	}
+	oldVehicle := vehicle
+	vehicle.PriceCOP = priceCOP
+	vehicle.Description = description
+	if len(images) > 0 {
+		vehicle.Images = images
+	}
+	if specs.EngineDisplacement != "" {
+		vehicle.Specs = specs
+	}
+	s.vehicles[id] = vehicle
+	if err := s.saveLocked(); err != nil {
+		s.vehicles[id] = oldVehicle
+		return domain.Vehicle{}, err
+	}
+	return vehicle, nil
+}
+
+func (s *Store) DeleteSellerVehicle(id, sellerID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	vehicle, ok := s.vehicles[id]
+	if !ok || vehicle.SellerID != sellerID {
+		return ErrNotFound
+	}
+	delete(s.vehicles, id)
+	if err := s.saveLocked(); err != nil {
+		s.vehicles[id] = vehicle
+		return err
+	}
+	return nil
+}
+
+func (s *Store) SetUserBlocked(userID string, blocked bool) (domain.User, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	user, ok := s.users[userID]
+	if !ok {
+		return domain.User{}, ErrNotFound
+	}
+	oldBlocked := user.IsBlocked
+	user.IsBlocked = blocked
+	s.users[userID] = user
+	if err := s.saveLocked(); err != nil {
+		user.IsBlocked = oldBlocked
+		s.users[userID] = user
+		return domain.User{}, err
+	}
+	return user, nil
+}
+
+func (s *Store) AddUserWarning(userID string, warning string) (domain.User, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	user, ok := s.users[userID]
+	if !ok {
+		return domain.User{}, ErrNotFound
+	}
+	oldWarnings := user.Warnings
+	user.Warnings = append(user.Warnings, warning)
+	s.users[userID] = user
+	if err := s.saveLocked(); err != nil {
+		user.Warnings = oldWarnings
+		s.users[userID] = user
+		return domain.User{}, err
+	}
+	return user, nil
 }
 
 func (s *Store) DeleteUser(id string) error {

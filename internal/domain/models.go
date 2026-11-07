@@ -25,19 +25,36 @@ type User struct {
 	Role         Role      `json:"role"`
 	PasswordSalt string    `json:"password_salt"`
 	PasswordHash string    `json:"password_hash"`
+	IsBlocked    bool      `json:"is_blocked"`
+	Warnings     []string  `json:"warnings"`
 	CreatedAt    time.Time `json:"created_at"`
 }
 
+type TechnicalSpecs struct {
+	EngineDisplacement string `json:"engine_displacement"`
+	FuelType           string `json:"fuel_type"`
+	Horsepower         int    `json:"horsepower"`
+	TorqueNM           int    `json:"torque_nm"`
+	Transmission       string `json:"transmission"`
+	BodyType           string `json:"body_type"`
+	Doors              int    `json:"doors"`
+	MileageKM          int    `json:"mileage_km"`
+	Color              string `json:"color"`
+	Traction           string `json:"traction"`
+}
+
 type Vehicle struct {
-	ID          string        `json:"id"`
-	Make        string        `json:"make"`
-	Model       string        `json:"model"`
-	Year        int           `json:"year"`
-	PriceCOP    int64         `json:"price_cop"`
-	Description string        `json:"description"`
-	SellerID    string        `json:"seller_id"`
-	Status      VehicleStatus `json:"status"`
-	CreatedAt   time.Time     `json:"created_at"`
+	ID          string         `json:"id"`
+	Make        string         `json:"make"`
+	Model       string         `json:"model"`
+	Year        int            `json:"year"`
+	PriceCOP    int64          `json:"price_cop"`
+	Description string         `json:"description"`
+	Images      []string       `json:"images"`
+	Specs       TechnicalSpecs `json:"specs"`
+	SellerID    string         `json:"seller_id"`
+	Status      VehicleStatus  `json:"status"`
+	CreatedAt   time.Time      `json:"created_at"`
 }
 
 type SellerContact struct {
@@ -47,13 +64,15 @@ type SellerContact struct {
 }
 
 type PublicVehicle struct {
-	ID          string        `json:"id"`
-	Make        string        `json:"make"`
-	Model       string        `json:"model"`
-	Year        int           `json:"year"`
-	PriceCOP    int64         `json:"price_cop"`
-	Description string        `json:"description"`
-	Status      VehicleStatus `json:"status"`
-	CreatedAt   time.Time     `json:"created_at"`
-	Seller      SellerContact `json:"seller"`
+	ID          string         `json:"id"`
+	Make        string         `json:"make"`
+	Model       string         `json:"model"`
+	Year        int            `json:"year"`
+	PriceCOP    int64          `json:"price_cop"`
+	Description string         `json:"description"`
+	Images      []string       `json:"images"`
+	Specs       TechnicalSpecs `json:"specs"`
+	Status      VehicleStatus  `json:"status"`
+	CreatedAt   time.Time      `json:"created_at"`
+	Seller      SellerContact  `json:"seller"`
 }

@@ -24,7 +24,9 @@ func main() {
 		log.Fatalf("no se pudo cargar la auditoría: %v", err)
 	}
 	app := service.New(dataStore)
-	if err := app.EnsureAdmin(os.Getenv("ADMIN_EMAIL"), os.Getenv("ADMIN_PASSWORD")); err != nil {
+	adminEmail := envOr("ADMIN_EMAIL", "admin@automarket.local")
+	adminPassword := envOr("ADMIN_PASSWORD", "AdminAutoMarket2026*")
+	if err := app.EnsureAdmin(adminEmail, adminPassword); err != nil {
 		log.Fatalf("no se pudo configurar el administrador: %v", err)
 	}
 

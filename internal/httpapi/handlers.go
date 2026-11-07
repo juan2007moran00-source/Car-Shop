@@ -1,8 +1,12 @@
 package httpapi
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -24,11 +28,13 @@ type loginRequest struct {
 }
 
 type publishVehicleRequest struct {
-	Make        string `json:"make"`
-	Model       string `json:"model"`
-	Year        int    `json:"year"`
-	PriceCOP    int64  `json:"price_cop"`
-	Description string `json:"description"`
+	Make        string                `json:"make"`
+	Model       string                `json:"model"`
+	Year        int                   `json:"year"`
+	PriceCOP    int64                 `json:"price_cop"`
+	Description string                `json:"description"`
+	Images      []string              `json:"images"`
+	Specs       domain.TechnicalSpecs `json:"specs"`
 }
 
 func registerSeller(app *service.Service) gin.HandlerFunc {
@@ -63,8 +69,13 @@ func login(app *service.Service) gin.HandlerFunc {
 			return
 		}
 		setActor(c, user)
+		warnings := user.Warnings
+		if warnings == nil {
+			warnings = []string{}
+		}
 		c.JSON(http.StatusOK, gin.H{"token": token, "token_type": "Bearer", "user": gin.H{
 			"id": user.ID, "name": user.Name, "email": user.Email, "role": user.Role,
+			"is_blocked": user.IsBlocked, "warnings": warnings,
 		}})
 	}
 }
@@ -95,8 +106,13 @@ func publishVehicle(app *service.Service) gin.HandlerFunc {
 		}
 		user := currentUser(c)
 		vehicle, err := app.PublishVehicle(user.ID, service.VehicleInput{
-			Make: request.Make, Model: request.Model, Year: request.Year,
-			PriceCOP: request.PriceCOP, Description: request.Description,
+			Make:        request.Make,
+			Model:       request.Model,
+			Year:        request.Year,
+			PriceCOP:    request.PriceCOP,
+			Description: request.Description,
+			Images:      request.Images,
+			Specs:       request.Specs,
 		})
 		if err != nil {
 			writeServiceError(c, err)
@@ -128,12 +144,195 @@ func listUsers(app *service.Service) gin.HandlerFunc {
 		users := app.Users()
 		result := make([]gin.H, 0, len(users))
 		for _, user := range users {
+			warnings := user.Warnings
+			if warnings == nil {
+				warnings = []string{}
+			}
 			result = append(result, gin.H{
 				"id": user.ID, "name": user.Name, "email": user.Email, "phone": user.Phone,
-				"role": user.Role, "created_at": user.CreatedAt,
+				"role": user.Role, "is_blocked": user.IsBlocked, "warnings": warnings, "created_at": user.CreatedAt,
 			})
 		}
 		c.JSON(http.StatusOK, gin.H{"users": result})
+	}
+}
+
+func getMe(app *service.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user := currentUser(c)
+		warnings := user.Warnings
+		if warnings == nil {
+			warnings = []string{}
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"id":         user.ID,
+			"name":       user.Name,
+			"email":      user.Email,
+			"phone":      user.Phone,
+			"role":       user.Role,
+			"is_blocked": user.IsBlocked,
+			"warnings":   warnings,
+			"created_at": user.CreatedAt,
+		})
+	}
+}
+
+func listSellerVehicles(app *service.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user := currentUser(c)
+		c.JSON(http.StatusOK, gin.H{"vehicles": app.SellerVehicles(user.ID)})
+	}
+}
+
+type updateVehicleRequest struct {
+	PriceCOP    int64                 `json:"price_cop"`
+	Description string                `json:"description"`
+	Images      []string              `json:"images"`
+	Specs       domain.TechnicalSpecs `json:"specs"`
+}
+
+func updateSellerVehicle(app *service.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var request updateVehicleRequest
+		if err := c.ShouldBindJSON(&request); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "el cuerpo debe ser JSON válido"})
+			return
+		}
+		user := currentUser(c)
+		vehicle, err := app.UpdateVehicle(user.ID, c.Param("id"), request.PriceCOP, request.Description, request.Images, request.Specs)
+		if err != nil {
+			writeServiceError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, vehicle)
+	}
+}
+
+func uploadImages() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		form, err := c.MultipartForm()
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "se requiere un formulario multipart con imágenes"})
+			return
+		}
+		files := form.File["images"]
+		if len(files) == 0 {
+			files = form.File["files"]
+		}
+		if len(files) == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "debes seleccionar al menos una imagen"})
+			return
+		}
+
+		_ = os.MkdirAll("data/uploads", 0o755)
+		urls := make([]string, 0, len(files))
+
+		for _, file := range files {
+			ext := strings.ToLower(filepath.Ext(file.Filename))
+			if ext != ".jpg" && ext != ".jpeg" && ext != ".png" && ext != ".webp" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "solo se permiten formatos JPG, JPEG, PNG y WEBP"})
+				return
+			}
+			if file.Size > 15<<20 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "el tamaño máximo por imagen es de 15 MB"})
+				return
+			}
+
+			randomBytes := make([]byte, 16)
+			if _, err := rand.Read(randomBytes); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "error generando nombre de archivo"})
+				return
+			}
+			fileName := hex.EncodeToString(randomBytes) + ext
+			dst := filepath.Join("data/uploads", fileName)
+
+			if err := c.SaveUploadedFile(file, dst); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "no se pudo guardar la imagen"})
+				return
+			}
+			urls = append(urls, "/uploads/"+fileName)
+		}
+
+		c.JSON(http.StatusOK, gin.H{"urls": urls})
+	}
+}
+
+func deleteSellerVehicle(app *service.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user := currentUser(c)
+		if err := app.DeleteSellerVehicle(user.ID, c.Param("id")); err != nil {
+			writeServiceError(c, err)
+			return
+		}
+		c.Status(http.StatusNoContent)
+	}
+}
+
+func listAllVehiclesAdmin(app *service.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"vehicles": app.AdminAllVehicles()})
+	}
+}
+
+type warnUserRequest struct {
+	Message string `json:"message"`
+}
+
+func warnUser(app *service.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var request warnUserRequest
+		if err := c.ShouldBindJSON(&request); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "el cuerpo debe ser JSON válido"})
+			return
+		}
+		user, err := app.WarnUser(c.Param("id"), request.Message)
+		if err != nil {
+			writeServiceError(c, err)
+			return
+		}
+		warnings := user.Warnings
+		if warnings == nil {
+			warnings = []string{}
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"id":         user.ID,
+			"name":       user.Name,
+			"email":      user.Email,
+			"is_blocked": user.IsBlocked,
+			"warnings":   warnings,
+		})
+	}
+}
+
+func blockUser(app *service.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user, err := app.BlockUser(c.Param("id"))
+		if err != nil {
+			writeServiceError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"id":         user.ID,
+			"name":       user.Name,
+			"email":      user.Email,
+			"is_blocked": user.IsBlocked,
+		})
+	}
+}
+
+func unblockUser(app *service.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user, err := app.UnblockUser(c.Param("id"))
+		if err != nil {
+			writeServiceError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"id":         user.ID,
+			"name":       user.Name,
+			"email":      user.Email,
+			"is_blocked": user.IsBlocked,
+		})
 	}
 }
 
@@ -215,6 +414,8 @@ func writeServiceError(c *gin.Context, err error) {
 		c.JSON(http.StatusConflict, gin.H{"error": "ya existe una cuenta con ese correo"})
 	case errors.Is(err, service.ErrInvalidCredentials):
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "correo o contraseña inválidos"})
+	case errors.Is(err, service.ErrUserBlocked):
+		c.JSON(http.StatusForbidden, gin.H{"error": "tu cuenta ha sido bloqueada por un administrador"})
 	case errors.Is(err, store.ErrNotFound):
 		c.JSON(http.StatusNotFound, gin.H{"error": "recurso no encontrado"})
 	case errors.Is(err, store.ErrInvalidState):

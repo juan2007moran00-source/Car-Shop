@@ -21,6 +21,7 @@ import (
 var (
 	ErrInvalidInput       = errors.New("datos inválidos")
 	ErrInvalidCredentials = errors.New("correo o contraseña inválidos")
+	ErrUserBlocked        = errors.New("tu cuenta ha sido bloqueada por un administrador")
 )
 
 const passwordIterations = 600_000
@@ -44,6 +45,8 @@ type VehicleInput struct {
 	Year        int
 	PriceCOP    int64
 	Description string
+	Images      []string
+	Specs       domain.TechnicalSpecs
 }
 
 func New(dataStore *store.Store) *Service {
@@ -99,6 +102,9 @@ func (s *Service) Login(email, password string) (domain.User, string, error) {
 	if !ok {
 		return domain.User{}, "", ErrInvalidCredentials
 	}
+	if user.IsBlocked {
+		return domain.User{}, "", ErrUserBlocked
+	}
 	salt, err := hex.DecodeString(user.PasswordSalt)
 	if err != nil {
 		return domain.User{}, "", ErrInvalidCredentials
@@ -132,7 +138,10 @@ func (s *Service) Authenticate(token string) (domain.User, bool) {
 		return domain.User{}, false
 	}
 	user, ok := s.store.UserByID(userID)
-	return user, ok
+	if !ok || user.IsBlocked {
+		return domain.User{}, false
+	}
+	return user, true
 }
 
 func (s *Service) PublicVehicles() []domain.PublicVehicle {
@@ -173,12 +182,57 @@ func (s *Service) Users() []domain.User {
 	return s.store.Users()
 }
 
+func validateSpecs(specs domain.TechnicalSpecs) bool {
+	if strings.TrimSpace(specs.EngineDisplacement) == "" || len(specs.EngineDisplacement) > 40 {
+		return false
+	}
+	if strings.TrimSpace(specs.FuelType) == "" || len(specs.FuelType) > 40 {
+		return false
+	}
+	if specs.Horsepower <= 0 || specs.Horsepower > 3000 {
+		return false
+	}
+	if specs.TorqueNM <= 0 || specs.TorqueNM > 5000 {
+		return false
+	}
+	if strings.TrimSpace(specs.Transmission) == "" || len(specs.Transmission) > 40 {
+		return false
+	}
+	if strings.TrimSpace(specs.BodyType) == "" || len(specs.BodyType) > 40 {
+		return false
+	}
+	if specs.Doors <= 0 || specs.Doors > 10 {
+		return false
+	}
+	if specs.MileageKM < 0 || specs.MileageKM > 2000000 {
+		return false
+	}
+	if strings.TrimSpace(specs.Color) == "" || len(specs.Color) > 40 {
+		return false
+	}
+	if strings.TrimSpace(specs.Traction) == "" || len(specs.Traction) > 40 {
+		return false
+	}
+	return true
+}
+
 func (s *Service) PublishVehicle(sellerID string, input VehicleInput) (domain.Vehicle, error) {
 	makeName := strings.TrimSpace(input.Make)
 	model := strings.TrimSpace(input.Model)
 	description := strings.TrimSpace(input.Description)
 	if makeName == "" || model == "" || len(makeName) > 80 || len(model) > 120 ||
 		input.Year < 1886 || input.Year > time.Now().Year()+1 || input.PriceCOP <= 0 || len(description) > 1000 {
+		return domain.Vehicle{}, ErrInvalidInput
+	}
+	if len(input.Images) == 0 {
+		return domain.Vehicle{}, ErrInvalidInput
+	}
+	for _, img := range input.Images {
+		if strings.TrimSpace(img) == "" {
+			return domain.Vehicle{}, ErrInvalidInput
+		}
+	}
+	if !validateSpecs(input.Specs) {
 		return domain.Vehicle{}, ErrInvalidInput
 	}
 	if seller, ok := s.store.UserByID(sellerID); !ok || seller.Role != domain.RoleSeller {
@@ -195,6 +249,8 @@ func (s *Service) PublishVehicle(sellerID string, input VehicleInput) (domain.Ve
 		Year:        input.Year,
 		PriceCOP:    input.PriceCOP,
 		Description: description,
+		Images:      input.Images,
+		Specs:       input.Specs,
 		SellerID:    sellerID,
 		Status:      domain.VehiclePending,
 		CreatedAt:   time.Now().UTC(),
@@ -231,10 +287,78 @@ func (s *Service) DeleteUser(userID string) error {
 	return nil
 }
 
+func (s *Service) SellerVehicles(sellerID string) []domain.Vehicle {
+	return s.store.VehiclesBySeller(sellerID)
+}
+
+func (s *Service) UpdateVehicle(sellerID, vehicleID string, priceCOP int64, description string, images []string, specs domain.TechnicalSpecs) (domain.Vehicle, error) {
+	description = strings.TrimSpace(description)
+	if priceCOP <= 0 || len(description) > 1000 {
+		return domain.Vehicle{}, ErrInvalidInput
+	}
+	if len(images) > 0 {
+		for _, img := range images {
+			if strings.TrimSpace(img) == "" {
+				return domain.Vehicle{}, ErrInvalidInput
+			}
+		}
+	}
+	if specs.EngineDisplacement != "" && !validateSpecs(specs) {
+		return domain.Vehicle{}, ErrInvalidInput
+	}
+	return s.store.UpdateVehicleDetails(vehicleID, sellerID, priceCOP, description, images, specs)
+}
+
+func (s *Service) DeleteSellerVehicle(sellerID, vehicleID string) error {
+	return s.store.DeleteSellerVehicle(vehicleID, sellerID)
+}
+
+func (s *Service) AdminAllVehicles() []domain.PublicVehicle {
+	vehicles := s.store.AllVehicles()
+	result := make([]domain.PublicVehicle, 0, len(vehicles))
+	for _, vehicle := range vehicles {
+		if publicVehicle, ok := s.withSeller(vehicle); ok {
+			result = append(result, publicVehicle)
+		}
+	}
+	return result
+}
+
+func (s *Service) BlockUser(userID string) (domain.User, error) {
+	user, err := s.store.SetUserBlocked(userID, true)
+	if err != nil {
+		return domain.User{}, err
+	}
+	s.sessionMu.Lock()
+	for tokenHash, id := range s.sessions {
+		if id == userID {
+			delete(s.sessions, tokenHash)
+		}
+	}
+	s.sessionMu.Unlock()
+	return user, nil
+}
+
+func (s *Service) UnblockUser(userID string) (domain.User, error) {
+	return s.store.SetUserBlocked(userID, false)
+}
+
+func (s *Service) WarnUser(userID, message string) (domain.User, error) {
+	message = strings.TrimSpace(message)
+	if message == "" || len(message) > 500 {
+		return domain.User{}, ErrInvalidInput
+	}
+	return s.store.AddUserWarning(userID, message)
+}
+
 func (s *Service) withSeller(vehicle domain.Vehicle) (domain.PublicVehicle, bool) {
 	seller, ok := s.store.UserByID(vehicle.SellerID)
 	if !ok {
 		return domain.PublicVehicle{}, false
+	}
+	images := vehicle.Images
+	if images == nil {
+		images = []string{}
 	}
 	return domain.PublicVehicle{
 		ID:          vehicle.ID,
@@ -243,6 +367,8 @@ func (s *Service) withSeller(vehicle domain.Vehicle) (domain.PublicVehicle, bool
 		Year:        vehicle.Year,
 		PriceCOP:    vehicle.PriceCOP,
 		Description: vehicle.Description,
+		Images:      images,
+		Specs:       vehicle.Specs,
 		Status:      vehicle.Status,
 		CreatedAt:   vehicle.CreatedAt,
 		Seller: domain.SellerContact{
@@ -274,6 +400,8 @@ func newUser(name, email, phone string, role domain.Role, password string) (doma
 		Role:         role,
 		PasswordSalt: hex.EncodeToString(salt),
 		PasswordHash: hex.EncodeToString(passwordHash),
+		IsBlocked:    false,
+		Warnings:     []string{},
 		CreatedAt:    time.Now().UTC(),
 	}, nil
 }
