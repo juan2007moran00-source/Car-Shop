@@ -2,6 +2,7 @@ package media
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -9,10 +10,9 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"io"
-	"os"
-	"path/filepath"
 	"regexp"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/juan2007moran00-source/Car-Shop/internal/domain"
 )
 
@@ -26,23 +26,22 @@ var (
 	fileNamePattern  = regexp.MustCompile(`^[a-f0-9]{32}\.(jpg|png)$`)
 )
 
-// Store guarda las imágenes en disco, fuera del directorio público.
+// Store gestiona el almacenamiento de imágenes en PostgreSQL.
 type Store struct {
-	root string
+	pool *pgxpool.Pool
 }
 
-func New(root string) (*Store, error) {
-	absolute, err := filepath.Abs(root)
-	if err != nil {
-		return nil, err
+// New crea un nuevo almacenamiento de imágenes usando PostgreSQL.
+func New(pool *pgxpool.Pool) (*Store, error) {
+	if pool == nil {
+		return nil, errors.New("pool de PostgreSQL nulo")
 	}
-	if err := os.MkdirAll(absolute, 0o700); err != nil {
-		return nil, err
-	}
-	return &Store{root: absolute}, nil
+	return &Store{pool: pool}, nil
 }
 
-// Save valida que el contenido real del archivo sea una imagen JPG o PNG, no solo su extensión.
+// Save valida que el contenido real del archivo sea una imagen JPG o PNG,
+// y devuelve los bytes en domain.VehicleImage con el campo Data poblado.
+// NO inserta nada en la base de datos.
 func (s *Store) Save(vehicleID string, reader io.Reader) (domain.VehicleImage, error) {
 	if !vehicleIDPattern.MatchString(vehicleID) {
 		return domain.VehicleImage{}, ErrInvalidImage
@@ -56,6 +55,7 @@ func (s *Store) Save(vehicleID string, reader io.Reader) (domain.VehicleImage, e
 	if err != nil {
 		return domain.VehicleImage{}, ErrInvalidImage
 	}
+
 	var extension, contentType string
 	switch format {
 	case "jpeg":
@@ -73,34 +73,6 @@ func (s *Store) Save(vehicleID string, reader io.Reader) (domain.VehicleImage, e
 		return domain.VehicleImage{}, err
 	}
 	fileName := imageID + "." + extension
-	directory := filepath.Join(s.root, vehicleID)
-	if err := os.MkdirAll(directory, 0o700); err != nil {
-		return domain.VehicleImage{}, err
-	}
-	temporary, err := os.CreateTemp(directory, ".upload-*.tmp")
-	if err != nil {
-		return domain.VehicleImage{}, err
-	}
-	temporaryPath := temporary.Name()
-	defer os.Remove(temporaryPath)
-	if err := temporary.Chmod(0o600); err != nil {
-		temporary.Close()
-		return domain.VehicleImage{}, err
-	}
-	if _, err := temporary.Write(data); err != nil {
-		temporary.Close()
-		return domain.VehicleImage{}, err
-	}
-	if err := temporary.Sync(); err != nil {
-		temporary.Close()
-		return domain.VehicleImage{}, err
-	}
-	if err := temporary.Close(); err != nil {
-		return domain.VehicleImage{}, err
-	}
-	if err := os.Rename(temporaryPath, filepath.Join(directory, fileName)); err != nil {
-		return domain.VehicleImage{}, err
-	}
 
 	return domain.VehicleImage{
 		ID:          imageID,
@@ -109,31 +81,39 @@ func (s *Store) Save(vehicleID string, reader io.Reader) (domain.VehicleImage, e
 		Width:       config.Width,
 		Height:      config.Height,
 		SizeBytes:   int64(len(data)),
+		Data:        data,
 	}, nil
 }
 
+// DeleteVehicle ya no es necesario (ON DELETE CASCADE en foreign key).
+// Se mantiene por compatibilidad de la interfaz pero es un no-op.
 func (s *Store) DeleteVehicle(vehicleID string) error {
 	if !vehicleIDPattern.MatchString(vehicleID) {
 		return nil
 	}
-	err := os.RemoveAll(filepath.Join(s.root, vehicleID))
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	return err
+	// ON DELETE CASCADE en la foreign key limpia vehicle_images automáticamente
+	return nil
 }
 
-// Resolve devuelve la ruta de una imagen verificando que el nombre sea seguro.
-func (s *Store) Resolve(vehicleID, fileName string) (string, bool) {
+// Resolve busca una imagen en la base de datos por vehicle_id y file_name.
+// Devuelve el contenido bytes y el Content-Type.
+func (s *Store) Resolve(vehicleID, fileName string) ([]byte, string, bool) {
 	if !vehicleIDPattern.MatchString(vehicleID) || !fileNamePattern.MatchString(fileName) {
-		return "", false
+		return nil, "", false
 	}
-	path := filepath.Join(s.root, vehicleID, fileName)
-	info, err := os.Stat(path)
-	if err != nil || info.IsDir() {
-		return "", false
+
+	var data []byte
+	var contentType string
+	err := s.pool.QueryRow(context.Background(), `
+		SELECT data, content_type FROM vehicle_images WHERE vehicle_id = $1 AND file_name = $2`,
+		vehicleID, fileName).Scan(&data, &contentType)
+	if err != nil {
+		return nil, "", false
 	}
-	return path, true
+	if data == nil {
+		return nil, "", false
+	}
+	return data, contentType, true
 }
 
 func newImageID() (string, error) {

@@ -15,35 +15,32 @@ Aplicación web en Go para consultar un catálogo público de vehículos usados,
 
 - Se aceptan archivos **JPG o PNG**; se valida el contenido real del archivo, no solo la extensión.
 - Una de las imágenes cargadas se marca como portada.
-- Los archivos se guardan en `data/uploads/` y se sirven mediante `/media/{vehicleID}/{archivo}`. No están dentro de la carpeta pública de archivos estáticos.
-- En PostgreSQL solo se guardan los metadatos de cada imagen (`vehicle_images`).
+- Las imágenes se guardan en la base de datos PostgreSQL (columna `data BYTEA` en `vehicle_images`) y se sirven mediante `/media/{vehicleID}/{archivo}`. La URL pública de las imágenes no cambia.
+- El almacenamiento en disco `data/uploads/` ya no se usa.
 
 ## Iniciar el servidor
 
 Necesitas Go y una base de datos PostgreSQL. Crea la base y define las variables antes de arrancar (PowerShell, desde la raíz del repositorio):
 
 ```powershell
-docker exec pg_container psql -U root -d postgres -c "CREATE DATABASE automarket;"
-$env:AUTOMARKET_DATABASE_URL = "postgres://root:root@localhost:5432/automarket?sslmode=disable"
+$env:AUTOMARKET_DATABASE_URL = "postgres://usuario:clave@host:puerto/nombre_basedatos?sslmode=require"
 $env:ADMIN_EMAIL = "admin@automarket.local"
 $env:ADMIN_PASSWORD = "una-clave-de-al-menos-8-caracteres"
 go run ./cmd/web
 ```
 
-Abre **https://localhost:8443**. En el primer arranque se genera un certificado autofirmado en `data/certs/`; el navegador mostrará una advertencia que debes aceptar para desarrollo local.
+La aplicación se conectará a PostgreSQL y creará las tablas automáticamente si no existen.
 
-Al conectar, la aplicación crea automáticamente las tablas `users`, `vehicles` y `vehicle_images` si no existen (esquema en `internal/store/schema.sql`).
+Si se define la variable `PORT`, la aplicación escuchará HTTP plano en `0.0.0.0:PORT` (modo Render, sin TLS). Si no, usará HTTPS con certificado autofirmado en `:8443`.
 
 ### Variables de entorno
 
 | Variable | Valor por defecto | Uso |
 | --- | --- | --- |
-| `AUTOMARKET_DATABASE_URL` | — (obligatoria) | Cadena de conexión a PostgreSQL |
+| `AUTOMARKET_DATABASE_URL` | — (obligatoria) | Cadena de conexión a PostgreSQL. **Debe incluir `sslmode=require`** y usar la URL directa de Neon (no pooler), o añadir `default_query_exec_mode=simple_protocol`. |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | — | Credenciales de la cuenta de administrador (se definen juntas) |
-| `AUTOMARKET_ADDR` | `:8443` | Dirección del servidor HTTPS |
-| `AUTOMARKET_CERT_DIR` | `data/certs` | Carpeta del certificado de desarrollo |
-| `AUTOMARKET_AUDIT_FILE` | `data/audit.jsonl` | Bitácora de auditoría |
-| `AUTOMARKET_MEDIA_DIR` | `data/uploads` | Almacenamiento privado de imágenes |
+| `AUTOMARKET_ADDR` | `:8443` | Dirección del servidor HTTPS (local). Ignorado en modo Render |
+| `AUTOMARKET_CERT_DIR` | `data/certs` | Carpeta del certificado de desarrollo (modo local solo) |
 
 ## Administrador
 
@@ -82,14 +79,36 @@ En `docs/plantuml/`: `estructura.puml` (diagrama de estructura) y `comportamient
 
 ## Organización
 
-- `cmd/web`: arranque del servidor HTTPS y certificado de desarrollo.
+- `cmd/web`: arranque del servidor. Si hay `PORT`, usa HTTP plano; si no, HTTPS con certificado autofirmado.
 - `internal/httpapi`: rutas, autenticación, autorización y formularios multipart.
 - `internal/service`: reglas del sistema.
 - `internal/domain`: modelos de datos.
 - `internal/store`: persistencia en PostgreSQL.
-- `internal/media`: validación y almacenamiento privado de imágenes.
-- `internal/audit`: registro de operaciones.
+- `internal/media`: validación y almacenamiento de imágenes en PostgreSQL.
+- `internal/audit`: registro de operaciones en base de datos.
 - `web/templates`: páginas HTML.
 - `web/static`: CSS y JavaScript.
 
-Los datos locales (imágenes, certificado y bitácora) se guardan en `data/` y Git los excluye.
+## Despliegue en Render + Neon
+
+Para desplegar en Render con base de datos en Neon:
+
+**Build Command:**
+```powershell
+go build -tags netgo -ldflags '-s -w' -o app ./cmd/web
+```
+
+**Start Command:**
+```
+./app
+```
+
+**Variables de entorno:**
+- `AUTOMARKET_DATABASE_URL`: Cadena de conexión a Neon con `sslmode=require` (usar URL directa, no pooler) o añadir `?default_query_exec_mode=simple_protocol`.
+- `ADMIN_EMAIL`: Correo de la cuenta administrador.
+- `ADMIN_PASSWORD`: Contraseña de la cuenta administrador.
+
+**Notas:**
+- El directorio `data/` no necesita estar configurado; las imágenes se guardan en PostgreSQL y la bitácora también.
+- Las sesiones se mantienen en memoria y se pierden al reiniciar la aplicación.
+- Git debe excluir `data/` pero no debe versionar certificados ni claves.

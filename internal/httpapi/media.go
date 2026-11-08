@@ -9,12 +9,17 @@ import (
 
 func serveMedia(mediaStore *media.Store) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		path, ok := mediaStore.Resolve(c.Param("vehicleID"), c.Param("fileName"))
+		vehicleID := c.Param("vehicleID")
+		fileName := c.Param("fileName")
+
+		data, contentType, ok := mediaStore.Resolve(vehicleID, fileName)
 		if !ok {
 			c.Status(http.StatusNotFound)
 			return
 		}
+		c.Header("Content-Type", contentType)
 		c.Header("Cache-Control", "public, max-age=604800, immutable")
-		c.File(path)
+		c.Status(http.StatusOK)
+		c.Writer.Write(data)
 	}
 }

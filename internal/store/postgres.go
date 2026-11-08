@@ -20,19 +20,16 @@ type Postgres struct {
 	pool *pgxpool.Pool
 }
 
-func NewPostgres(ctx context.Context, databaseURL string) (*Postgres, error) {
-	pool, err := pgxpool.New(ctx, databaseURL)
-	if err != nil {
-		return nil, fmt.Errorf("configurar PostgreSQL: %w", err)
-	}
-	if err := pool.Ping(ctx); err != nil {
-		pool.Close()
-		return nil, fmt.Errorf("conectar con PostgreSQL: %w", err)
-	}
+// NewPostgresFromPool usa un pool existente (por ejemplo, compartido desde main.go)
+// y ejecuta el esquema si no ha sido creado aún.
+// Devuelve el error SIEMPRE (nunca lo ignora) y usa SimpleProtocol.
+func NewPostgresFromPool(ctx context.Context, pool *pgxpool.Pool) (*Postgres, error) {
+	// Ejecutamos el esquema con SimpleProtocol y SIEMPRE devolvemos el error
 	if _, err := pool.Exec(ctx, schemaSQL, pgx.QueryExecModeSimpleProtocol); err != nil {
-		pool.Close()
-		return nil, fmt.Errorf("crear esquema: %w", err)
+		return nil, fmt.Errorf("ejecutar esquema: %w", err)
 	}
+	// Agregar columna data si no existe (idempotente) - el ALTER TABLE
+	// ya se ejecuta como parte de la llamada desde main.go
 	return &Postgres{pool: pool}, nil
 }
 
@@ -118,14 +115,15 @@ func (p *Postgres) CreateVehicle(vehicle domain.Vehicle) error {
 
 	for index, image := range vehicle.Images {
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO vehicle_images (id, vehicle_id, file_name, content_type, width, height, size_bytes, position)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+			INSERT INTO vehicle_images (id, vehicle_id, file_name, content_type, width, height, size_bytes, position, data)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
 			image.ID, vehicle.ID, image.FileName, image.ContentType,
-			image.Width, image.Height, image.SizeBytes, index,
+			image.Width, image.Height, image.SizeBytes, index, image.Data,
 		); err != nil {
 			return err
 		}
 	}
+
 	return tx.Commit(ctx)
 }
 

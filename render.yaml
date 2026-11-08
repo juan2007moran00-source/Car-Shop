@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: automarket
+    runtime: go
+    plan: free
+    buildCommand: go build -tags netgo -ldflags '-s -w' -o app ./cmd/web
+    startCommand: ./app
+    healthCheckPath: /
+    envVars:
+      - key: AUTOMARKET_DATABASE_URL
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false

@@ -114,4 +114,27 @@ curl.exe -k -s -X POST "$base/api/vehicles/$vehicleId/sale" -H "Authorization: B
 curl.exe -k -s "$base/api/vehicles"
 ```
 
-La publicación vendida deja de aparecer en el catálogo y el vendedor la ve como **Vendida** en su panel. Los usuarios y vehículos se conservan en PostgreSQL entre reinicios; las imágenes y la bitácora de auditoría, en la carpeta `data`.
+La publicación vendida deja de aparecer en el catálogo y el vendedor la ve como **Vendida** en su panel. Los usuarios y vehículos se conservan en PostgreSQL entre reinicios; las imágenes y la bitácora de auditoría se guardan en la base de datos PostgreSQL.
+
+## Despliegue en Render + Neon
+
+Para desplegar en Render con base de datos en Neon:
+
+**Build Command:**
+```powershell
+go build -tags netgo -ldflags '-s -w' -o app ./cmd/web
+```
+
+**Start Command:**
+```
+./app
+```
+
+**Variables de entorno:**
+- `AUTOMARKET_DATABASE_URL`: Cadena de conexión a Neon con `sslmode=require` (usar URL directa, no pooler) o añadir `?default_query_exec_mode=simple_protocol`.
+- `ADMIN_EMAIL`: Correo de la cuenta administrador.
+- `ADMIN_PASSWORD`: Contraseña de la cuenta administrador.
+
+**Notas:**
+- El directorio `data/` no necesita estar configurado; las imágenes se guardan en PostgreSQL y la bitácora también.
+- Las sesiones se mantienen en memoria y se pierden al reiniciar la aplicación.
