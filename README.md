@@ -112,3 +112,19 @@ go build -tags netgo -ldflags '-s -w' -o app ./cmd/web
 - El directorio `data/` no necesita estar configurado; las imágenes se guardan en PostgreSQL y la bitácora también.
 - Las sesiones se mantienen en memoria y se pierden al reiniciar la aplicación.
 - Git debe excluir `data/` pero no debe versionar certificados ni claves.
+
+## Despliegue en Render + Neon
+
+1. En Neon crea un proyecto y copia la connection string **directa** (no pooler). Debe terminar en `?sslmode=require`.
+2. En Render crea un Web Service desde el repositorio:
+   - Build Command: `go build -tags netgo -ldflags '-s -w' -o app ./cmd/web`
+   - Start Command: `./app`
+3. Variables de entorno:
+
+| Variable | Uso |
+| --- | --- |
+| `AUTOMARKET_DATABASE_URL` | Conexión a PostgreSQL en Neon |
+| `ADMIN_EMAIL` | Correo de la cuenta de administrador |
+| `ADMIN_PASSWORD` | Contraseña del administrador (mínimo 8 caracteres) |
+
+Render define `PORT` automáticamente; con esa variable la app escucha HTTP plano y Render entrega HTTPS por fuera. Las imágenes y la bitácora de auditoría se guardan en PostgreSQL. En el plan gratuito la app se duerme tras inactividad y las sesiones en memoria se pierden al reiniciar.
