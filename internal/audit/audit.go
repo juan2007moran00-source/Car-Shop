@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -38,49 +37,19 @@ type hashContent struct {
 }
 
 // Logger registra eventos de auditoría en la tabla audit_log con cadena de hashes SHA-256.
+// El último hash se lee de la base de datos en cada registro, de modo que varias
+// instancias de la aplicación que compartan la base mantengan una única cadena.
 type Logger struct {
-	pool     *pgxpool.Pool
-	mu       sync.Mutex
-	lastHash string
+	pool *pgxpool.Pool
 }
 
-// NewLogger crea un nuevo logger de auditoría usando PostgreSQL.
-// Carga el último hash de la tabla audit_log para validar la cadena de integridad al iniciar.
+// NewLogger crea un nuevo logger de auditoría usando PostgreSQL y valida la
+// cadena de integridad existente al iniciar.
 func NewLogger(pool *pgxpool.Pool) (*Logger, error) {
-	l := &Logger{pool: pool}
-
-	// Cargar el último hash de la cadena existente
-	lastHash, err := lastHashFromPool(pool)
-	if err != nil {
-		return nil, fmt.Errorf("no se pudo cargar el último hash de auditoría: %w", err)
-	}
-	l.lastHash = lastHash
-
-	// Validar la cadena de hashes si hay eventos existentes
 	if err := validateChainFromPool(pool); err != nil {
 		return nil, fmt.Errorf("la cadena de integridad de auditoría no es válida: %w", err)
 	}
-
-	return l, nil
-}
-
-// lastHashFromPool obtiene el último hash de la tabla audit_log.
-// Si la tabla está vacía, devuelve cadena vacía SIN error.
-// Usa errors.Is con pgx.ErrNoRows en lugar de comparaciones directas.
-func lastHashFromPool(pool *pgxpool.Pool) (string, error) {
-	var lastHash sql.NullString
-	err := pool.QueryRow(context.Background(), `
-		SELECT hash FROM audit_log ORDER BY id DESC LIMIT 1`).Scan(&lastHash)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return "", nil
-		}
-		return "", fmt.Errorf("obtener último hash: %w", err)
-	}
-	if lastHash.Valid {
-		return lastHash.String, nil
-	}
-	return "", nil
+	return &Logger{pool: pool}, nil
 }
 
 // validateChainFromPool valida la cadena de hashes SHA-256 en la tabla audit_log.
@@ -173,30 +142,36 @@ func hashEvent(event Event) string {
 }
 
 // Record inserta un evento nuevo en la tabla audit_log, manteniendo la cadena de hashes.
-// El mutex asegura que el cálculo e inserción sean atómicos incluso con concurrencia.
+// Un bloqueo asesor de transacción serializa los registros incluso entre instancias:
+// el prev_hash se lee dentro de la misma transacción que inserta el evento.
 func (l *Logger) Record(event Event) error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	ctx := context.Background()
+	tx, err := l.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("iniciar transacción: %w", err)
+	}
+	defer tx.Rollback(ctx)
 
-	// Preparar el evento
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(7301)`); err != nil {
+		return fmt.Errorf("bloquear cadena de auditoría: %w", err)
+	}
+
+	var previousHash string
+	err = tx.QueryRow(ctx, `SELECT hash FROM audit_log ORDER BY id DESC LIMIT 1`).Scan(&previousHash)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("obtener último hash: %w", err)
+	}
+
 	event.Time = event.Time.UTC().Truncate(time.Microsecond)
-	event.PrevHash = l.lastHash
+	event.PrevHash = previousHash
 	event.Hash = hashEvent(event)
 
-	// Insertar en la tabla audit_log
-	// actor_id y role se insertan tal como son (vacíos o con valor)
-	_, err := l.pool.Exec(context.Background(), `
+	if _, err := tx.Exec(ctx, `
 		INSERT INTO audit_log (time, method, path, status, actor_id, role, prev_hash, hash)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
 		event.Time, event.Method, event.Path, event.Status,
-		event.ActorID, event.Role, event.PrevHash, event.Hash)
-	if err != nil {
-		return fmt.Errorf("insertar evento auditoría: %s", err.Error())
+		event.ActorID, event.Role, event.PrevHash, event.Hash); err != nil {
+		return fmt.Errorf("insertar evento auditoría: %w", err)
 	}
-
-	// Confirmar transacción y actualizar lastHash
-	// Nota: no usamos tx.Commit aquí porque pool.Exec no requiere commit explícito en pgxpool
-	// pero sí actualizamos lastHash
-	l.lastHash = event.Hash
-	return nil
+	return tx.Commit(ctx)
 }
