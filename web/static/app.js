@@ -490,6 +490,11 @@ function buildDetail(vehicle) {
         meta,
         el('p', { class: 'detail-price', text: formatCOP(vehicle.price_cop) }),
         el('p', { class: 'detail-description', text: vehicle.description || 'Sin descripción.' }),
+        el('div', { class: 'detail-seller-contact' },
+            el('p', { class: 'detail-seller-name', text: `Vendedor: ${vehicle.seller?.name || 'No disponible'}` }),
+            el('p', { class: 'detail-seller-phone', text: `Teléfono: ${vehicle.seller?.phone || 'No disponible'}` }),
+            el('p', { class: 'detail-seller-email', text: `Correo: ${vehicle.seller?.email || 'No disponible'}` }),
+        ),
     );
 
     return el('div', { class: 'detail-layout' }, gallery, info);
