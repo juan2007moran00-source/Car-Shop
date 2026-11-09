@@ -485,26 +485,11 @@ function buildDetail(vehicle) {
         text: `${vehicle.year || '—'} · Publicado el ${formatDate(vehicle.created_at) || '—'}`,
     });
 
-    const phone = String(vehicle.seller?.phone || '').trim();
-    const email = String(vehicle.seller?.email || '').trim();
-
-    const contact = el('div', { class: 'contact-card' },
-        el('strong', { text: vehicle.seller?.name || 'Vendedor no disponible' }),
-        phone ? el('span', { text: `Teléfono: ${phone}` }) : null,
-        email ? el('span', { text: `Correo: ${email}` }) : null,
-        !phone && !email ? el('p', { class: 'detail-empty', text: 'El vendedor no registró canales de contacto.' }) : null,
-    );
-
     const info = el('div', { class: 'detail-info' },
         titleRow,
         meta,
         el('p', { class: 'detail-price', text: formatCOP(vehicle.price_cop) }),
         el('p', { class: 'detail-description', text: vehicle.description || 'Sin descripción.' }),
-        el('div', { class: 'detail-section' },
-            el('h3', { text: 'Contacto del vendedor' }),
-            contact,
-            el('p', { class: 'hint', text: 'El contacto es visible para cualquier visitante, sin necesidad de registrarse.' }),
-        ),
     );
 
     return el('div', { class: 'detail-layout' }, gallery, info);
