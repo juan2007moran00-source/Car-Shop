@@ -485,31 +485,14 @@ function buildDetail(vehicle) {
         text: `${vehicle.year || '—'} · Publicado el ${formatDate(vehicle.created_at) || '—'}`,
     });
 
-    const contactActions = el('div', { class: 'contact-actions' });
     const phone = String(vehicle.seller?.phone || '').trim();
     const email = String(vehicle.seller?.email || '').trim();
-    if (phone) {
-        contactActions.append(el('a', {
-            class: 'button button-accent',
-            href: `tel:${phone.replace(/[^\d+]/g, '')}`,
-            text: 'Llamar al vendedor',
-        }));
-    }
-    if (email) {
-        contactActions.append(el('a', {
-            class: 'button button-outline',
-            href: `mailto:${email}`,
-            text: 'Enviar correo',
-        }));
-    }
 
     const contact = el('div', { class: 'contact-card' },
         el('strong', { text: vehicle.seller?.name || 'Vendedor no disponible' }),
         phone ? el('span', { text: `Teléfono: ${phone}` }) : null,
         email ? el('span', { text: `Correo: ${email}` }) : null,
-        contactActions.children.length ? contactActions : el('p', {
-            class: 'detail-empty', text: 'El vendedor no registró canales de contacto.',
-        }),
+        !phone && !email ? el('p', { class: 'detail-empty', text: 'El vendedor no registró canales de contacto.' }) : null,
     );
 
     const info = el('div', { class: 'detail-info' },
